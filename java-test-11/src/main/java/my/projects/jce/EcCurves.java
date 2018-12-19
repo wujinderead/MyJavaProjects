@@ -3,13 +3,15 @@ package my.projects.jce;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.MultimapBuilder;
 
-import javax.xml.bind.DatatypeConverter;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Provider;
 import java.security.SecureRandom;
+import java.security.Signature;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.XECPrivateKey;
@@ -23,12 +25,15 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static javax.xml.bind.DatatypeConverter.printHexBinary;
+
 public class EcCurves {
     public static void main(String[] args) throws Exception {
         //testProvider();
-        testEcPrime();
-        testEcBinary();
+        //testEcPrime();
+        //testEcBinary();
         //testXec();
+        testSignature();
     }
 
     private static void testProvider() throws Exception {
@@ -50,6 +55,8 @@ public class EcCurves {
             map.put(service.getType(), service.getAlgorithm());
         }
         /*
+        Signature: [SHA224withECDSA, SHA256withECDSA, SHA512withECDSA, SHA1withECDSA, SHA384withECDSA, SHA512withECDSAinP1363Format, NONEwithECDSA
+            SHA1withECDSAinP1363Format, SHA224withECDSAinP1363Format, SHA384withECDSAinP1363Format, SHA256withECDSAinP1363Format, NONEwithECDSAinP1363Format]
         KeyPairGenerator: [X448, X25519, XDH, EC]
         KeyAgreement: [X448, X25519, ECDH, XDH]
         KeyFactory: [X448, X25519, XDH, EC]
@@ -78,8 +85,7 @@ public class EcCurves {
         System.out.println("Co: " + spec.getCofactor());
         System.out.println("Gx: " + spec.getGenerator().getAffineX());
         System.out.println("Gy: " + spec.getGenerator().getAffineY());
-        System.out.println("Sd: " + (spec.getCurve().getSeed() == null ?
-                null : DatatypeConverter.printHexBinary(spec.getCurve().getSeed())));
+        System.out.println("Sd: " + (spec.getCurve().getSeed() == null ? null : printHexBinary(spec.getCurve().getSeed())));
 
         KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", "SunEC");
         SecureRandom random = SecureRandom.getInstance("SHA1PRNG", "SUN");
@@ -117,8 +123,7 @@ public class EcCurves {
         System.out.println("Co: " + spec.getCofactor());
         System.out.println("Gx: " + spec.getGenerator().getAffineX());
         System.out.println("Gy: " + spec.getGenerator().getAffineY());
-        System.out.println("Sd: " + (spec.getCurve().getSeed() == null ?
-                null : DatatypeConverter.printHexBinary(spec.getCurve().getSeed())));
+        System.out.println("Sd: " + (spec.getCurve().getSeed() == null ? null : printHexBinary(spec.getCurve().getSeed())));
         System.out.println(field.getReductionPolynomial().testBit(field.getM()));
         for (int term: field.getMidTermsOfReductionPolynomial()) {
             System.out.println(field.getReductionPolynomial().testBit(term));
@@ -149,7 +154,41 @@ public class EcCurves {
         XECPublicKey pub = (XECPublicKey) pair.getPublic();
         System.out.println("algorithm: " + priv.getAlgorithm());
         System.out.println("format: " + priv.getFormat());
-        System.out.println("S: " + DatatypeConverter.printHexBinary(priv.getScalar().get()));
+        System.out.println("S: " + printHexBinary(priv.getScalar().get()));
         System.out.println("U: " + pub.getU());
+    }
+
+    private static void testSignature() throws Exception {
+        // generate ec key
+        AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC", "SunEC");
+        ECGenParameterSpec curveSpec = new ECGenParameterSpec("secp256r1");
+        parameters.init(curveSpec);
+        ECParameterSpec spec = parameters.getParameterSpec(ECParameterSpec.class);
+
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", "SunEC");
+        SecureRandom random = SecureRandom.getInstance("SHA1PRNG", "SUN");
+        random.setSeed(System.nanoTime());
+        generator.initialize(spec, random);
+        KeyPair pair = generator.generateKeyPair();
+        ECPrivateKey priv = (ECPrivateKey) pair.getPrivate();
+        ECPublicKey pub = (ECPublicKey) pair.getPublic();
+
+        // sign
+        Signature signer = Signature.getInstance("SHA1withECDSA", "SunEC");
+        signer.initSign(priv, random);
+        ByteBuffer buffer = ByteBuffer.allocate(4096);
+        buffer.put("我是F91，这是我的激战2故事，我在激战2等你".getBytes());
+        buffer.put("我是F91，这是我的激战2故事，我在激战2等你".getBytes(Charset.forName("GB18030")));
+        byte[] bytes = buffer.array();
+        System.out.println("msg len: " + bytes.length);
+        signer.update(bytes);
+        byte[] signature = signer.sign();
+        System.out.println("signature: " + printHexBinary(signature));
+        System.out.printf("signature bytes: %d, bits: %d\n", signature.length, 8*signature.length);
+
+        // verify
+        signer.initVerify(pub);
+        signer.update(bytes);
+        System.out.println("verified: " + signer.verify(signature));
     }
 }

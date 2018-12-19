@@ -51,11 +51,6 @@
             <artifactId>reflections</artifactId>
             <version>0.9.11</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.kafka</groupId>
-            <artifactId>connect-api</artifactId>
-            <version>1.0.0</version>
-        </dependency>
     </dependencies>
 
     <build>
