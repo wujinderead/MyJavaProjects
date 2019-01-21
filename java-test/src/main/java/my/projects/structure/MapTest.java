@@ -9,18 +9,13 @@ import java.util.concurrent.ConcurrentSkipListSet;
 
 public class MapTest {
     public static void main(String[] args) {
+        String[] strs = new String[]{"6", "rfghjh", "8", "a", "4", "2", "ddasd", "1", "7"};
         // normal hash set: hash table order
         {
             Set<String> set = new HashSet<>();
-            set.add("6");
-            set.add("rfghjh");
-            set.add("8");
-            set.add("a");
-            set.add("4");
-            set.add("2");
-            set.add("ddasd");
-            set.add("1");
-            set.add("7");
+            for (String str: strs) {
+                set.add(str);
+            }
             for (String i : set) {
                 System.out.print(i + " ");
             }
@@ -28,16 +23,10 @@ public class MapTest {
         }
         // linked hash set: insertion order
         {
-            Set<String> set = new TreeSet<>();
-            set.add("6");
-            set.add("rfghjh");
-            set.add("8");
-            set.add("a");
-            set.add("4");
-            set.add("2");
-            set.add("ddasd");
-            set.add("1");
-            set.add("7");
+            Set<String> set = new LinkedHashSet<>();
+            for (String str: strs) {
+                set.add(str);
+            }
             for (String i : set) {
                 System.out.print(i + " ");
             }
@@ -45,16 +34,10 @@ public class MapTest {
         }
         // tree set: value order
         {
-            Set<String> set = new LinkedHashSet<>();
-            set.add("6");
-            set.add("rfghjh");
-            set.add("8");
-            set.add("a");
-            set.add("4");
-            set.add("2");
-            set.add("ddasd");
-            set.add("1");
-            set.add("7");
+            Set<String> set = new TreeSet<>();
+            for (String str: strs) {
+                set.add(str);
+            }
             for (String i : set) {
                 System.out.print(i + " ");
             }
@@ -63,15 +46,9 @@ public class MapTest {
         // concurrent skip list set: value order
         {
             Set<String> set = new ConcurrentSkipListSet<>();
-            set.add("6");
-            set.add("rfghjh");
-            set.add("8");
-            set.add("a");
-            set.add("4");
-            set.add("2");
-            set.add("ddasd");
-            set.add("1");
-            set.add("7");
+            for (String str: strs) {
+                set.add(str);
+            }
             for (String i : set) {
                 System.out.print(i + " ");
             }
@@ -79,17 +56,14 @@ public class MapTest {
         }
         // priority queue: is a heap underline, each poll() return the least value
         {
-            PriorityQueue<Integer> queue = new PriorityQueue<>();
-            queue.add(5);
-            queue.add(3);
-            queue.add(6);
-            queue.add(1);
-            queue.add(2);
-            queue.add(7);
-            queue.add(4);
-            for (int i=0; i<7; i++) {
-                System.out.println(queue.poll());
+            PriorityQueue<String> queue = new PriorityQueue<>();
+            for (String str: strs) {
+                queue.add(str);
             }
+            for (int i=0; i<strs.length; i++) {
+                System.out.print(queue.poll() + " ");
+            }
+            System.out.println();
         }
     }
 }

@@ -455,7 +455,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
             tab[i] = newNode(hash, key, value, null);
         else {
             Node<K,V> e; K k;
-            if (p.hash == hash &&
+            if (p.hash == hash &&   // always check first node
                     ((k = p.key) == key || (key != null && key.equals(k))))
                 e = p;
             else if (p instanceof TreeNode)
@@ -479,10 +479,10 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                 if (!onlyIfAbsent || oldValue == null)
                     e.value = value;
                 afterNodeAccess(e);
-                return oldValue;
+                return oldValue;   // the situation where no new node added, return
             }
         }
-        ++modCount;
+        ++modCount;   // new node added, add count and resize
         if (++size > threshold)
             resize();
         afterNodeInsertion(evict);
@@ -532,26 +532,29 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                 Node<K,V> e;
                 if ((e = oldTab[j]) != null) {
                     oldTab[j] = null;
-                    if (e.next == null)
+                    if (e.next == null)         // if it's a single node, no child
                         newTab[e.hash & (newCap - 1)] = e;
-                    else if (e instanceof TreeNode)
+                    else if (e instanceof TreeNode)    // split a tree node
                         ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
                     else { // preserve order
                         Node<K,V> loHead = null, loTail = null;
                         Node<K,V> hiHead = null, hiTail = null;
                         Node<K,V> next;
+                        // split elements in old table to new table, because we are using power-of-two expansion,
+                        // the elements from each bin must either stay at same index, or move
+                        // with a power of two offset in the new table.
                         do {
                             next = e.next;
-                            if ((e.hash & oldCap) == 0) {
+                            if ((e.hash & oldCap) == 0) {   // index remains in lower part of table
                                 if (loTail == null)
-                                    loHead = e;
+                                    loHead = e;       // loHead is the head node of linked list
                                 else
                                     loTail.next = e;
                                 loTail = e;
                             }
-                            else {
+                            else {                      // index remains in higher part of table
                                 if (hiTail == null)
-                                    hiHead = e;
+                                    hiHead = e;       // hiHead is the head node of linked list
                                 else
                                     hiTail.next = e;
                                 hiTail = e;
@@ -583,7 +586,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
         else if ((e = tab[index = (n - 1) & hash]) != null) {
             TreeNode<K,V> hd = null, tl = null;
             do {
-                TreeNode<K,V> p = replacementTreeNode(e, null);
+                TreeNode<K,V> p = replacementTreeNode(e, null);  // TreeNode is double-linked list
                 if (tl == null)
                     hd = p;
                 else {
@@ -641,7 +644,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                 (p = tab[index = (n - 1) & hash]) != null) {
             Node<K,V> node = null, e; K k; V v;
             if (p.hash == hash &&
-                    ((k = p.key) == key || (key != null && key.equals(k))))
+                    ((k = p.key) == key || (key != null && key.equals(k))))  // check first node
                 node = p;
             else if ((e = p.next) != null) {
                 if (p instanceof TreeNode)
@@ -660,11 +663,11 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
             }
             if (node != null && (!matchValue || (v = node.value) == value ||
                     (value != null && value.equals(v)))) {
-                if (node instanceof TreeNode)
+                if (node instanceof TreeNode)  // to delete in TreeNode
                     ((TreeNode<K,V>)node).removeTreeNode(this, tab, movable);
-                else if (node == p)
+                else if (node == p)   // to delete first node
                     tab[index] = node.next;
-                else
+                else                  // to delete non-first node
                     p.next = node.next;
                 ++modCount;
                 --size;
@@ -1851,7 +1854,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
          * This is messier than typical red-black deletion code because we
          * cannot swap the contents of an interior node with a leaf
          * successor that is pinned by "next" pointers that are accessible
-         * independently during traversal. So instead we swap the tree
+         * independently during traversal. So instead we swloHap the tree
          * linkages. If the current tree appears to have too few nodes,
          * the bin is converted back to a plain bin. (The test triggers
          * somewhere between 2 and 6 nodes, depending on tree structure).
@@ -1993,7 +1996,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                     tab[index] = loHead.untreeify(map);
                 else {
                     tab[index] = loHead;
-                    if (hiHead != null) // (else is already treeified)
+                    if (hiHead != null) // (else is already treeified), hiHead===null means the tree is not split. The structure remain the same.
                         loHead.treeify(tab);
                 }
             }
@@ -2002,7 +2005,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                     tab[index + bit] = hiHead.untreeify(map);
                 else {
                     tab[index + bit] = hiHead;
-                    if (loHead != null)
+                    if (loHead != null)   // loHead===null means the tree is not split. The structure remain the same.
                         hiHead.treeify(tab);
                 }
             }
