@@ -1,85 +1,21 @@
 package my.projects.net;
 
-import javax.xml.bind.DatatypeConverter;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.InterfaceAddress;
-import java.net.NetworkInterface;
 import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.Collections;
-import java.util.Enumeration;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class InterfaceTest {
+public class SelectorTest {
     public static void main(String[] args) throws Exception {
-        //testInterfaces();
-        //testInetAddress();
         testSelector();
-    }
-
-    private static void testInterfaces() throws SocketException {
-        Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
-        for (NetworkInterface netint: Collections.list(nets))
-            displayInterfaceInformation(netint);
-    }
-
-    private static void displayInterfaceInformation(NetworkInterface netint) throws SocketException {
-        System.out.printf("display name: %s\n", netint.getDisplayName());
-        System.out.printf("name: %s\n", netint.getName());
-        System.out.printf("index: %s\n", netint.getIndex());
-        byte[] haddr;
-        System.out.printf("hardware addr: %s\n",
-                (haddr = netint.getHardwareAddress()) == null ? "null" : DatatypeConverter.printHexBinary(haddr));
-        System.out.printf("mtu: %s\n", netint.getMTU());
-        NetworkInterface parent;
-        System.out.printf("parent: %s\n", (parent = netint.getParent()) == null ? "null" : parent.getName());
-        List<InterfaceAddress> intAddrs = netint.getInterfaceAddresses();
-        for (InterfaceAddress intAddr: intAddrs) {
-            System.out.println("interface addr: " + intAddr.getAddress());
-            System.out.println("interface broadcast: " + intAddr.getBroadcast());
-            System.out.println("interface prefix: " + intAddr.getNetworkPrefixLength());
-        }
-        Enumeration<InetAddress> inetAddresses = netint.getInetAddresses();
-        for (InetAddress inetAddress : Collections.list(inetAddresses)) {
-            System.out.printf("InetAddress: %s\n", inetAddress);
-            System.out.printf("inet canonical host: %s\n", inetAddress.getCanonicalHostName());
-            System.out.printf("inet hostname: %s\n", inetAddress.getHostName());
-            System.out.printf("inet host addr: %s\n", inetAddress.getHostAddress());
-        }
-        System.out.println("\n");
-    }
-
-    private static void testInetAddress() throws UnknownHostException {
-        InetAddress local = InetAddress.getLocalHost();
-        System.out.printf("InetAddress: %s\n", local);
-        System.out.printf("inet canonical host: %s\n", local.getCanonicalHostName());
-        System.out.printf("inet hostname: %s\n", local.getHostName());
-        System.out.printf("inet host addr: %s\n", local.getHostAddress());
-
-        InetAddress loopback = InetAddress.getLoopbackAddress();
-        System.out.printf("InetAddress: %s\n", loopback);
-        System.out.printf("inet canonical host: %s\n", loopback.getCanonicalHostName());
-        System.out.printf("inet hostname: %s\n", loopback.getHostName());
-        System.out.printf("inet host addr: %s\n", loopback.getHostAddress());
-
-        InetAddress[] baidus = InetAddress.getAllByName("www.baidu.com");
-        for (InetAddress inetAddress: baidus) {
-            System.out.printf("InetAddress: %s\n", inetAddress);
-            System.out.printf("inet canonical host: %s\n", inetAddress.getCanonicalHostName());
-            System.out.printf("inet hostname: %s\n", inetAddress.getHostName());
-            System.out.printf("inet host addr: %s\n", inetAddress.getHostAddress());
-        }
     }
 
     private static void testSelector() throws IOException {
