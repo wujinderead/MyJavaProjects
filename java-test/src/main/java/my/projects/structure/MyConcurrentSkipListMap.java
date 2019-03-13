@@ -19,10 +19,7 @@ import java.util.SortedMap;
 import java.util.Spliterator;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * A scalable concurrent {@link ConcurrentNavigableMap} implementation.
@@ -1671,140 +1668,6 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         }
     }
 
-    /**
-     * If the specified key is not already associated with a value,
-     * attempts to compute its value using the given mapping function
-     * and enters it into this map unless {@code null}.  The function
-     * is <em>NOT</em> guaranteed to be applied once atomically only
-     * if the value is not present.
-     *
-     * @param key key with which the specified value is to be associated
-     * @param mappingFunction the function to compute a value
-     * @return the current (existing or computed) value associated with
-     *         the specified key, or null if the computed value is null
-     * @throws NullPointerException if the specified key is null
-     *         or the mappingFunction is null
-     * @since 1.8
-     */
-    public V computeIfAbsent(K key,
-                             Function<? super K, ? extends V> mappingFunction) {
-        if (key == null || mappingFunction == null)
-            throw new NullPointerException();
-        V v, p, r;
-        if ((v = doGet(key)) == null &&
-                (r = mappingFunction.apply(key)) != null)
-            v = (p = doPut(key, r, true)) == null ? r : p;
-        return v;
-    }
-
-    /**
-     * If the value for the specified key is present, attempts to
-     * compute a new mapping given the key and its current mapped
-     * value. The function is <em>NOT</em> guaranteed to be applied
-     * once atomically.
-     *
-     * @param key key with which a value may be associated
-     * @param remappingFunction the function to compute a value
-     * @return the new value associated with the specified key, or null if none
-     * @throws NullPointerException if the specified key is null
-     *         or the remappingFunction is null
-     * @since 1.8
-     */
-    public V computeIfPresent(K key,
-                              BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        if (key == null || remappingFunction == null)
-            throw new NullPointerException();
-        Node<K,V> n; Object v;
-        while ((n = findNode(key)) != null) {
-            if ((v = n.value) != null) {
-                @SuppressWarnings("unchecked") V vv = (V) v;
-                V r = remappingFunction.apply(key, vv);
-                if (r != null) {
-                    if (n.casValue(vv, r))
-                        return r;
-                }
-                else if (doRemove(key, vv) != null)
-                    break;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Attempts to compute a mapping for the specified key and its
-     * current mapped value (or {@code null} if there is no current
-     * mapping). The function is <em>NOT</em> guaranteed to be applied
-     * once atomically.
-     *
-     * @param key key with which the specified value is to be associated
-     * @param remappingFunction the function to compute a value
-     * @return the new value associated with the specified key, or null if none
-     * @throws NullPointerException if the specified key is null
-     *         or the remappingFunction is null
-     * @since 1.8
-     */
-    public V compute(K key,
-                     BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        if (key == null || remappingFunction == null)
-            throw new NullPointerException();
-        for (;;) {
-            Node<K,V> n; Object v; V r;
-            if ((n = findNode(key)) == null) {
-                if ((r = remappingFunction.apply(key, null)) == null)
-                    break;
-                if (doPut(key, r, true) == null)
-                    return r;
-            }
-            else if ((v = n.value) != null) {
-                @SuppressWarnings("unchecked") V vv = (V) v;
-                if ((r = remappingFunction.apply(key, vv)) != null) {
-                    if (n.casValue(vv, r))
-                        return r;
-                }
-                else if (doRemove(key, vv) != null)
-                    break;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * If the specified key is not already associated with a value,
-     * associates it with the given value.  Otherwise, replaces the
-     * value with the results of the given remapping function, or
-     * removes if {@code null}. The function is <em>NOT</em>
-     * guaranteed to be applied once atomically.
-     *
-     * @param key key with which the specified value is to be associated
-     * @param value the value to use if absent
-     * @param remappingFunction the function to recompute a value if present
-     * @return the new value associated with the specified key, or null if none
-     * @throws NullPointerException if the specified key or value is null
-     *         or the remappingFunction is null
-     * @since 1.8
-     */
-    public V merge(K key, V value,
-                   BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
-        if (key == null || value == null || remappingFunction == null)
-            throw new NullPointerException();
-        for (;;) {
-            Node<K,V> n; Object v; V r;
-            if ((n = findNode(key)) == null) {
-                if (doPut(key, value, true) == null)
-                    return value;
-            }
-            else if ((v = n.value) != null) {
-                @SuppressWarnings("unchecked") V vv = (V) v;
-                if ((r = remappingFunction.apply(vv, value)) != null) {
-                    if (n.casValue(vv, r))
-                        return r;
-                }
-                else if (doRemove(key, vv) != null)
-                    return null;
-            }
-        }
-    }
-
     /* ---------------- View methods -------------- */
 
     /*
@@ -3251,30 +3114,6 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             }
             public int characteristics() {
                 return Spliterator.DISTINCT;
-            }
-        }
-    }
-
-    // default Map method overrides
-
-    public void forEach(BiConsumer<? super K, ? super V> action) {
-        if (action == null) throw new NullPointerException();
-        V v;
-        for (Node<K,V> n = findFirst(); n != null; n = n.next) {
-            if ((v = n.getValidValue()) != null)
-                action.accept(n.key, v);
-        }
-    }
-
-    public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
-        if (function == null) throw new NullPointerException();
-        V v;
-        for (Node<K,V> n = findFirst(); n != null; n = n.next) {
-            while ((v = n.getValidValue()) != null) {
-                V r = function.apply(n.key, v);
-                if (r == null) throw new NullPointerException();
-                if (n.casValue(v, r))
-                    break;
             }
         }
     }
