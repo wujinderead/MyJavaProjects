@@ -1,4 +1,4 @@
-package my.projects.util;
+package my.projects.system;
 
 import java.nio.charset.Charset;
 import java.util.SortedMap;
@@ -8,7 +8,8 @@ import static javax.xml.bind.DatatypeConverter.printHexBinary;
 public class CharsetTest {
     public static void main(String[] args) {
         testCharset();
-        //testString();
+        testCharsets();
+        testString();
     }
 
     private static void testCharset() {
@@ -22,11 +23,23 @@ public class CharsetTest {
         }
     }
 
+    private static void testCharsets() {
+        SortedMap<String, Charset> map = Charset.availableCharsets();
+        for (String key: map.keySet()) {
+            Charset cs = map.get(key);
+            System.out.println("key: " + key);
+            System.out.println("charset: " + cs.name());
+            System.out.println("display: " + cs.displayName());
+            System.out.println("alias: " + cs.aliases());
+            System.out.println("can encode: " + cs.canEncode());
+            System.out.println();
+        }
+    }
+
     private static void testString() {
-        // 😀 unicode \u1f660, exceeds the limit \uffff in java;
-        // thus, to specify 😀, should use UTF-16 encode \ud83d\ude00.
-        // however in java, the 'char' type is actually int16;
-        // thus, the length of string "😀" is actually 2.
+        // 😀 unicode \u1f660, exceeds the limit of char (16 bits) in java;
+        // thus, to specify a char '😀', should use UTF-16 encode \ud83d\ude00.
+        // therefore, the length of string "😀" is actually 2.
         String str = "商 9 ࿗ ࿘ ᐇ ᑥ \uD83D\uDE00 \uD834\uDF01 \u262F";
         System.out.println(printHexBinary(str.getBytes(Charset.forName("UTF-16"))));
         System.out.println(printHexBinary(str.getBytes(Charset.forName("UTF-8"))));
