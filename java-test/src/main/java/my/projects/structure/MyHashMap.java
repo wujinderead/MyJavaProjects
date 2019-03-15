@@ -193,7 +193,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
      * Holds cached entrySet(). Note that AbstractMap fields are used
      * for keySet() and values().
      */
-    transient Set<Entry<K,V>> entrySet;
+    transient Set<Map.Entry<K,V>> entrySet;
 
     /**
      * The number of key-value mappings contained in this map.
@@ -581,19 +581,23 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
         if (tab == null || (n = tab.length) < MIN_TREEIFY_CAPACITY)
             resize();
         else if ((e = tab[index = (n - 1) & hash]) != null) {
-            TreeNode<K,V> hd = null, tl = null;
+            // replace the linked list of Node in a bin to TreeNode.
+            // TreeNode has not only parent, left, right pointers; but also prev and next pointers,
+            // make it a double-linked list
+            TreeNode<K,V> head = null, tail = null;
             do {
-                TreeNode<K,V> p = replacementTreeNode(e, null);  // TreeNode is double-linked list
-                if (tl == null)
-                    hd = p;
+                TreeNode<K,V> p = replacementTreeNode(e, null);
+                if (tail == null)
+                    head = p;
                 else {
-                    p.prev = tl;
-                    tl.next = p;
+                    p.prev = tail;
+                    tail.next = p;
                 }
-                tl = p;
+                tail = p;
             } while ((e = e.next) != null);
-            if ((tab[index] = hd) != null)
-                hd.treeify(tab);
+            // after replacement, treeify the nodes
+            if ((tab[index] = head) != null)
+                head.treeify(tab);
         }
     }
 
@@ -640,13 +644,14 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
         if ((tab = table) != null && (n = tab.length) > 0 &&
                 (p = tab[index = (n - 1) & hash]) != null) {
             Node<K,V> node = null, e; K k; V v;
+            // find the node to delete and assign it to variable 'node'
             if (p.hash == hash &&
                     ((k = p.key) == key || (key != null && key.equals(k))))  // check first node
                 node = p;
             else if ((e = p.next) != null) {
-                if (p instanceof TreeNode)
+                if (p instanceof TreeNode)  // if head node is TreeNode, find the node in tree
                     node = ((TreeNode<K,V>)p).getTreeNode(hash, key);
-                else {
+                else {    // find node in linked list
                     do {
                         if (e.hash == hash &&
                                 ((k = e.key) == key ||
@@ -658,6 +663,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                     } while ((e = e.next) != null);
                 }
             }
+            // if the node is found
             if (node != null && (!matchValue || (v = node.value) == value ||
                     (value != null && value.equals(v)))) {
                 if (node instanceof TreeNode)  // to delete in TreeNode
@@ -827,7 +833,8 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
      * @return a set view of the mappings contained in this map
      */
     public Set<Map.Entry<K,V>> entrySet() {
-        return null;
+        Set<Map.Entry<K,V>> es;
+        return (es = entrySet) == null ? (entrySet = new EntrySet()) : es;
     }
 
     final class EntrySet extends AbstractSet<Map.Entry<K,V>> {
@@ -1406,14 +1413,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
      * linked node.
      */
 
-    static class Entry<K,V> extends MyHashMap.Node<K,V> {
-        Entry<K,V> before, after;
-        Entry(int hash, K key, V value, Node<K,V> next) {
-            super(hash, key, value, next);
-        }
-    }
-
-    static final class TreeNode<K,V> extends MyHashMap.Entry<K,V> {
+    static final class TreeNode<K,V> extends MyLinkedHashMap.Entry<K,V> {
         TreeNode<K,V> parent;  // red-black tree links
         TreeNode<K,V> left;
         TreeNode<K,V> right;
@@ -1443,6 +1443,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                 int index = (n - 1) & root.hash;
                 TreeNode<K,V> first = (TreeNode<K,V>)tab[index];
                 if (root != first) {
+                    System.out.println("root moved.");
                     Node<K,V> rn;
                     tab[index] = root;
                     TreeNode<K,V> rp = root.prev;
@@ -1469,23 +1470,23 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
             do {
                 int ph, dir; K pk;
                 TreeNode<K,V> pl = p.left, pr = p.right, q;
-                if ((ph = p.hash) > h)
+                if ((ph = p.hash) > h)   // wanted hash < current hash, to left child
                     p = pl;
-                else if (ph < h)
+                else if (ph < h)         // wanted hash > current hash, to right child
                     p = pr;
-                else if ((pk = p.key) == k || (k != null && k.equals(pk)))
-                    return p;
-                else if (pl == null)
+                else if ((pk = p.key) == k || (k != null && k.equals(pk))) // wanted hash = current hash, and keys equal
+                    return p;                                              // find it, return current node
+                else if (pl == null)     // hash equal, check if left null
                     p = pr;
-                else if (pr == null)
+                else if (pr == null)     // hash equal, check if right null
                     p = pl;
                 else if ((kc != null ||
                         (kc = comparableClassFor(k)) != null) &&
-                        (dir = compareComparables(kc, k, pk)) != 0)
+                        (dir = compareComparables(kc, k, pk)) != 0)  // hash equal, both child none null, compare keys
                     p = (dir < 0) ? pl : pr;
-                else if ((q = pr.find(h, k, kc)) != null)
+                else if ((q = pr.find(h, k, kc)) != null)  // cannot compare keys, find in right child, if found, return
                     return q;
-                else
+                else           // finally find in left child
                     p = pl;
             } while (p != null);
             return null;
@@ -1519,12 +1520,12 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
          * Forms tree of the nodes linked from this node.
          * @return root of tree
          */
-        final void treeify(Node<K,V>[] tab) {
+        final void treeify(Node<K,V>[] tab) {  // change the linked list to tree, by insert nodes one by one
             TreeNode<K,V> root = null;
             for (TreeNode<K,V> x = this, next; x != null; x = next) {
                 next = (TreeNode<K,V>)x.next;
                 x.left = x.right = null;
-                if (root == null) {
+                if (root == null) {   // initialize root, must be 'this'
                     x.parent = null;
                     x.red = false;
                     root = x;
@@ -1533,9 +1534,11 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                     K k = x.key;
                     int h = x.hash;
                     Class<?> kc = null;
+                    // for each node 'x' to be inserted, insert it through root
                     for (TreeNode<K,V> p = root;;) {
                         int dir, ph;
                         K pk = p.key;
+                        // 'dir' decide the insert direction, i.e., to insert it in left or right child
                         if ((ph = p.hash) > h)
                             dir = -1;
                         else if (ph < h)
@@ -1546,19 +1549,19 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                             dir = tieBreakOrder(k, pk);
 
                         TreeNode<K,V> xp = p;
-                        if ((p = (dir <= 0) ? p.left : p.right) == null) {
-                            x.parent = xp;
+                        if ((p = (dir <= 0) ? p.left : p.right) == null) { // if p==null, the insert position is found
+                            x.parent = xp;                                 // otherwise, continue to p's child
                             if (dir <= 0)
                                 xp.left = x;
                             else
                                 xp.right = x;
-                            root = balanceInsertion(root, x);
+                            root = balanceInsertion(root, x);   // after insert a node, balance the tree
                             break;
                         }
                     }
                 }
             }
-            moveRootToFront(tab, root);
+            moveRootToFront(tab, root);  // root may change when balacing, so mobe root to front
         }
 
         /**
@@ -1567,8 +1570,8 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
          */
         final Node<K,V> untreeify(MyHashMap<K,V> map) {
             Node<K,V> hd = null, tl = null;
-            for (Node<K,V> q = this; q != null; q = q.next) {
-                Node<K,V> p = map.replacementNode(q, null);
+            for (Node<K,V> q = this; q != null; q = q.next) {    // the nodes in tree is already linked
+                Node<K,V> p = map.replacementNode(q, null); // so just need to change node class (TreeNode to Node)
                 if (tl == null)
                     hd = p;
                 else
@@ -1582,7 +1585,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
          * Tree version of putVal.
          */
         final TreeNode<K,V> putTreeVal(MyHashMap<K,V> map, Node<K,V>[] tab,
-                                       int h, K k, V v) {
+                                       int h, K k, V v) {   // put value in an existed tree
             Class<?> kc = null;
             boolean searched = false;
             TreeNode<K,V> root = (parent != null) ? root() : this;
@@ -1592,25 +1595,25 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                     dir = -1;
                 else if (ph < h)
                     dir = 1;
-                else if ((pk = p.key) == k || (k != null && k.equals(pk)))
+                else if ((pk = p.key) == k || (k != null && k.equals(pk)))  // for existed key, just return the node
                     return p;
                 else if ((kc == null &&
                         (kc = comparableClassFor(k)) == null) ||
-                        (dir = compareComparables(kc, k, pk)) == 0) {
+                        (dir = compareComparables(kc, k, pk)) == 0) {  // if hashes equal or comparable=0, tie break it
                     if (!searched) {
                         TreeNode<K,V> q, ch;
                         searched = true;
                         if (((ch = p.left) != null &&
                                 (q = ch.find(h, k, kc)) != null) ||
                                 ((ch = p.right) != null &&
-                                        (q = ch.find(h, k, kc)) != null))
+                                        (q = ch.find(h, k, kc)) != null))  // search in childs
                             return q;
                     }
                     dir = tieBreakOrder(k, pk);
                 }
 
                 TreeNode<K,V> xp = p;
-                if ((p = (dir <= 0) ? p.left : p.right) == null) {
+                if ((p = (dir <= 0) ? p.left : p.right) == null) {   // if p==null, no exited node, insert new node
                     Node<K,V> xpn = xp.next;
                     TreeNode<K,V> x = map.newTreeNode(h, k, v, xpn);
                     if (dir <= 0)
@@ -1621,7 +1624,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                     x.parent = x.prev = xp;
                     if (xpn != null)
                         ((TreeNode<K,V>)xpn).prev = x;
-                    moveRootToFront(tab, balanceInsertion(root, x));
+                    moveRootToFront(tab, balanceInsertion(root, x));  // balance tree after insert, and move root
                     return null;
                 }
             }
@@ -1645,16 +1648,16 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
             int index = (n - 1) & hash;
             TreeNode<K,V> first = (TreeNode<K,V>)tab[index], root = first, rl;
             TreeNode<K,V> succ = (TreeNode<K,V>)next, pred = prev;
-            if (pred == null)
+            if (pred == null)              // pred==null means to delete first node
                 tab[index] = first = succ;
             else
-                pred.next = succ;
+                pred.next = succ;     // move pointers to skip current node
             if (succ != null)
-                succ.prev = pred;
+                succ.prev = pred;     // move pointers to skip current node
             if (first == null)
                 return;
-            if (root.parent != null)
-                root = root.root();
+            if (root.parent != null)       // first may not be root, i.e.,
+                root = root.root();        // when movable==false, it won't invoke moveRootToFront after deletion
             if (root == null || root.right == null ||
                     (rl = root.left) == null || rl.left == null) {
                 tab[index] = first.untreeify(map);  // too small
@@ -1751,6 +1754,7 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
             for (TreeNode<K,V> e = b, next; e != null; e = next) {
                 next = (TreeNode<K,V>)e.next;
                 e.next = null;
+                // first split the tree into two linked lists
                 if ((e.hash & bit) == 0) {
                     if ((e.prev = loTail) == null)
                         loHead = e;
@@ -1769,12 +1773,15 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                 }
             }
 
+            // treeify the linked list to tree, if necessary
             if (loHead != null) {
                 if (lc <= UNTREEIFY_THRESHOLD)
                     tab[index] = loHead.untreeify(map);
                 else {
                     tab[index] = loHead;
-                    if (hiHead != null) // (else is already treeified), hiHead===null means the tree is not split. The structure remain the same.
+                    // hiHead===null means the tree is not split.
+                    // the tree remain the same in the low part.
+                    if (hiHead != null)
                         loHead.treeify(tab);
                 }
             }
@@ -1783,7 +1790,9 @@ public class MyHashMap<K,V> extends MyAbstractMap<K,V>
                     tab[index + bit] = hiHead.untreeify(map);
                 else {
                     tab[index + bit] = hiHead;
-                    if (loHead != null)   // loHead===null means the tree is not split. The structure remain the same.
+                    // loHead===null means the tree is not split.
+                    // the tree remain the same in the high part.
+                    if (loHead != null)
                         hiHead.treeify(tab);
                 }
             }
