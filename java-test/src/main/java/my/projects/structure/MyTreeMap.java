@@ -2195,42 +2195,47 @@ public class MyTreeMap<K,V>
     private void fixAfterInsertion(Entry<K,V> x) {
         x.color = RED;
 
+        // while x and parent both red
         while (x != null && x != root && x.parent.color == RED) {
+            // if parent is left child
             if (parentOf(x) == leftOf(parentOf(parentOf(x)))) {
                 Entry<K,V> y = rightOf(parentOf(parentOf(x)));
-                if (colorOf(y) == RED) {
+                if (colorOf(y) == RED) {                // if uncle is red
                     setColor(parentOf(x), BLACK);
-                    setColor(y, BLACK);
-                    setColor(parentOf(parentOf(x)), RED);
-                    x = parentOf(parentOf(x));
-                } else {
+                    setColor(y, BLACK);                    // set parent and uncle to black
+                    setColor(parentOf(parentOf(x)), RED);  // set grandparent red
+                    x = parentOf(parentOf(x));             // set x to grandparent and recur
+                } else {                                // else uncle is black
                     if (x == rightOf(parentOf(x))) {
-                        x = parentOf(x);
-                        rotateLeft(x);
-                    }
+                        x = parentOf(x);                   // if x is right child
+                        rotateLeft(x);                     // rotate parent to make a 'left left'
+                    }                                      // i.e., x and parent are both left child
                     setColor(parentOf(x), BLACK);
-                    setColor(parentOf(parentOf(x)), RED);
-                    rotateRight(parentOf(parentOf(x)));
+                    setColor(parentOf(parentOf(x)), RED);  // set parent black and grandparent red
+                    rotateRight(parentOf(parentOf(x)));    // and rotate right at grandparent
+                    // loop should end here, since x unchanged and x.parent is black
                 }
             } else {
+                // else parent is right child
                 Entry<K,V> y = leftOf(parentOf(parentOf(x)));
-                if (colorOf(y) == RED) {
+                if (colorOf(y) == RED) {                // if uncle is red
                     setColor(parentOf(x), BLACK);
-                    setColor(y, BLACK);
-                    setColor(parentOf(parentOf(x)), RED);
-                    x = parentOf(parentOf(x));
-                } else {
+                    setColor(y, BLACK);                    // set parent and uncle to black
+                    setColor(parentOf(parentOf(x)), RED);  // set grandparent red
+                    x = parentOf(parentOf(x));             // set x to grandparent and recur
+                } else {                                // else uncle is black
                     if (x == leftOf(parentOf(x))) {
-                        x = parentOf(x);
-                        rotateRight(x);
-                    }
+                        x = parentOf(x);                   // if x is right child
+                        rotateRight(x);                    // rotate parent to make a 'right right'
+                    }                                      // i.e., x and parent are both right child
                     setColor(parentOf(x), BLACK);
-                    setColor(parentOf(parentOf(x)), RED);
-                    rotateLeft(parentOf(parentOf(x)));
+                    setColor(parentOf(parentOf(x)), RED);  // set parent black and grandparent red
+                    rotateLeft(parentOf(parentOf(x)));     // and rotate left at grandparent
+                    // loop should end here, since x unchanged and x.parent is black
                 }
             }
         }
-        root.color = BLACK;
+        root.color = BLACK;  // set root to black
     }
 
     /**
@@ -2240,41 +2245,38 @@ public class MyTreeMap<K,V>
         modCount++;
         size--;
 
-        // If strictly internal, copy successor's element to p and then make p
-        // point to successor.
+        // if both child of p non-null, copy successor's element to p and then
+        // make p point to successor. successor must has no child or only one child
         if (p.left != null && p.right != null) {
             Entry<K,V> s = successor(p);
             p.key = s.key;
             p.value = s.value;
             p = s;
-        } // p has 2 children
+        }
 
         // Start fixup at replacement node, if it exists.
         Entry<K,V> replacement = (p.left != null ? p.left : p.right);
 
-        if (replacement != null) {
-            // Link replacement to parent
+        if (replacement != null) {              // p has one child
             replacement.parent = p.parent;
             if (p.parent == null)
                 root = replacement;
             else if (p == p.parent.left)
                 p.parent.left  = replacement;
             else
-                p.parent.right = replacement;
+                p.parent.right = replacement;   // use the child to replace p
 
-            // Null out links so they are OK to use by fixAfterDeletion.
-            p.left = p.right = p.parent = null;
+            p.left = p.right = p.parent = null; // set all pointer of p to null
 
-            // Fix replacement
-            if (p.color == BLACK)
+            if (p.color == BLACK)               // if we delete a black node, need to fix it
                 fixAfterDeletion(replacement);
-        } else if (p.parent == null) { // return if we are the only node.
+        } else if (p.parent == null) {          // return if to delete the root
             root = null;
-        } else { //  No children. Use self as phantom replacement and unlink.
-            if (p.color == BLACK)
+        } else {
+            if (p.color == BLACK)               // p has no child. use self as phantom replacement to fix
                 fixAfterDeletion(p);
 
-            if (p.parent != null) {
+            if (p.parent != null) {             // then unlink the pointers
                 if (p == p.parent.left)
                     p.parent.left = null;
                 else if (p == p.parent.right)
@@ -2286,33 +2288,35 @@ public class MyTreeMap<K,V>
 
     /** From CLR */
     private void fixAfterDeletion(Entry<K,V> x) {
+        // while x is black
         while (x != root && colorOf(x) == BLACK) {
-            if (x == leftOf(parentOf(x))) {
+            if (x == leftOf(parentOf(x))) {              // if x is left child
                 Entry<K,V> sib = rightOf(parentOf(x));
 
-                if (colorOf(sib) == RED) {
+                if (colorOf(sib) == RED) {            // if brother is red
                     setColor(sib, BLACK);
-                    setColor(parentOf(x), RED);
+                    setColor(parentOf(x), RED);       // set brother black and parent red, and rotate left at parent
                     rotateLeft(parentOf(x));
-                    sib = rightOf(parentOf(x));
+                    sib = rightOf(parentOf(x));       // that make brother's left child become new brother,
+                                                      // whose color must be black
                 }
 
                 if (colorOf(leftOf(sib))  == BLACK &&
-                        colorOf(rightOf(sib)) == BLACK) {
-                    setColor(sib, RED);
+                        colorOf(rightOf(sib)) == BLACK) {  // if both nephew are black
+                    setColor(sib, RED);                    // set brother red, and move x to parent to recur
                     x = parentOf(x);
-                } else {
-                    if (colorOf(rightOf(sib)) == BLACK) {
+                } else {                                   // has one nephew red
+                    if (colorOf(rightOf(sib)) == BLACK) {  // if right nephew is black
                         setColor(leftOf(sib), BLACK);
                         setColor(sib, RED);
                         rotateRight(sib);
-                        sib = rightOf(parentOf(x));
+                        sib = rightOf(parentOf(x));        // rotate to make right nephew red, make a 'right, right'
                     }
-                    setColor(sib, colorOf(parentOf(x)));
+                    setColor(sib, colorOf(parentOf(x)));   // set brother as parent
                     setColor(parentOf(x), BLACK);
-                    setColor(rightOf(sib), BLACK);
-                    rotateLeft(parentOf(x));
-                    x = root;
+                    setColor(rightOf(sib), BLACK);         // set parent and right nephew black
+                    rotateLeft(parentOf(x));               // rotate left at parent
+                    x = root;    // loop can end here
                 }
             } else { // symmetric
                 Entry<K,V> sib = leftOf(parentOf(x));
