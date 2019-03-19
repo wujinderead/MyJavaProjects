@@ -889,14 +889,14 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
         int h = spread(key.hashCode());
         if ((tab = table) != null && (n = tab.length) > 0 &&
                 (e = tabAt(tab, (n - 1) & h)) != null) {
-            if ((eh = e.hash) == h) {  // check head node first
+            if ((eh = e.hash) == h) {         // check head node first
                 if ((ek = e.key) == key || (ek != null && key.equals(ek)))
                     return e.val;
             }
-            else if (eh < 0)   // not normal node, e.g. TreeNode, use node.find()
+            else if (eh < 0)                  // not normal node, e.g. TreeNode, use node.find()
                 return (p = e.find(h, key)) != null ? p.val : null;
             while ((e = e.next) != null) {
-                if (e.hash == h &&
+                if (e.hash == h &&            // find node in linked list
                         ((ek = e.key) == key || (ek != null && key.equals(ek))))
                     return e.val;
             }
@@ -932,7 +932,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
             throw new NullPointerException();
         Node<K,V>[] t;
         if ((t = table) != null) {
-            Traverser<K,V> it = new Traverser<K,V>(t, t.length, 0, t.length);
+            Traverser<K,V> it = new Traverser<K,V>(t, t.length, 0, t.length);  // use traverser to traverse nodes
             for (Node<K,V> p; (p = it.advance()) != null; ) {
                 V v;
                 if ((v = p.val) == value || (v != null && value.equals(v)))
@@ -975,15 +975,15 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                 // thus won't get to this block, won't loop infinitely
                 if (casTabAt(tab, i, null,
                         new Node<K,V>(hash, key, value, null)))
-                    break;                   // no lock when adding to empty bin
+                    break;                               // no lock when adding to empty bin
             }
-            else if ((fh = f.hash) == MOVED)   // forwarding node
+            else if ((fh = f.hash) == MOVED)             // forwarding node
                 tab = helpTransfer(tab, f);
             else {
                 V oldVal = null;
-                synchronized (f) {    // synchronized the head node
-                    if (tabAt(tab, i) == f) {   // check if node changed
-                        if (fh >= 0) {   // search from linked node
+                synchronized (f) {                       // synchronized the head node to make change
+                    if (tabAt(tab, i) == f) {            // check if node changed
+                        if (fh >= 0) {                   // fh>=0 means normal node, search from linked node
                             binCount = 1;
                             for (Node<K,V> e = f;; ++binCount) {
                                 K ek;
@@ -1003,7 +1003,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                                 }
                             }
                         }
-                        else if (f instanceof TreeBin) {   // if the node is treeified
+                        else if (f instanceof TreeBin) {      // if the node is a tree node
                             Node<K,V> p;
                             binCount = 2;
                             if ((p = ((TreeBin<K,V>)f).putTreeVal(hash, key,
@@ -1019,7 +1019,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                     if (binCount >= TREEIFY_THRESHOLD)
                         treeifyBin(tab, i);
                     if (oldVal != null)
-                        return oldVal;  // oldVal exist, don't mind count
+                        return oldVal;                       // oldVal exist, don't mind count
                     break;
                 }
             }
@@ -1066,14 +1066,14 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
             if (tab == null || (n = tab.length) == 0 ||
                     (f = tabAt(tab, i = (n - 1) & hash)) == null)  // table or head node no exist, break to return null
                 break;
-            else if ((fh = f.hash) == MOVED)   // forwarding node
+            else if ((fh = f.hash) == MOVED)    // forwarding node
                 tab = helpTransfer(tab, f);
             else {
                 V oldVal = null;
                 boolean validated = false;
-                synchronized (f) {   // sync the head node
+                synchronized (f) {              // sync the head node to make change
                     if (tabAt(tab, i) == f) {   // check if head changed
-                        if (fh >= 0) {
+                        if (fh >= 0) {          // normal node
                             validated = true;
                             for (Node<K,V> e = f, pred = null;;) {
                                 K ek;
@@ -1084,43 +1084,44 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                                     if (cv == null || cv == ev ||
                                             (ev != null && cv.equals(ev))) {   // replace only if cv==null or cv==ev
                                         oldVal = ev;
-                                        if (value != null)   // 'value!=null' means to replace value
+                                        if (value != null)       // value!=null, means to replace value
                                             e.val = value;
                                         else if (pred != null)   // value==null, delete node
                                             pred.next = e.next;
-                                        else
-                                            setTabAt(tab, i, e.next);   // delete the head node
+                                        else                     // pred==null, delete the head node
+                                            setTabAt(tab, i, e.next);
                                     }
                                     break;
                                 }
                                 pred = e;
                                 if ((e = e.next) == null)
-                                    break;
+                                    break;                       // not found break
                             }
                         }
-                        else if (f instanceof TreeBin) {   // replace in tree
+                        else if (f instanceof TreeBin) {         // replace in tree
                             validated = true;
                             TreeBin<K,V> t = (TreeBin<K,V>)f;
                             TreeNode<K,V> r, p;
                             if ((r = t.root) != null &&
-                                    (p = r.findTreeNode(hash, key, null)) != null) {
+                                    (p = r.findTreeNode(hash, key, null)) != null) {   // if found
                                 V pv = p.val;
                                 if (cv == null || cv == pv ||
-                                        (pv != null && cv.equals(pv))) {
+                                        (pv != null && cv.equals(pv))) {       // replace only if cv==null or cv==pv
                                     oldVal = pv;
-                                    if (value != null)
+                                    if (value != null)                         // value!=null, replace value
                                         p.val = value;
-                                    else if (t.removeTreeNode(p))
-                                        setTabAt(tab, i, untreeify(t.first));
+                                    else if (t.removeTreeNode(p))              // remove in treenode, if tree too small
+                                        setTabAt(tab, i, untreeify(t.first));  // untreeify it and set table
                                 }
                             }
                         }
                     }
                 }
+                // validated==true, means 'tabAt(tab, i)==f' is satisfied and we have processed it, we can end the loop
                 if (validated) {
                     if (oldVal != null) {
-                        if (value == null)
-                            addCount(-1L, -1);   // check count
+                        if (value == null)               // value==null means deleted
+                            addCount(-1L, -1);   // should change count
                         return oldVal;
                     }
                     break;
