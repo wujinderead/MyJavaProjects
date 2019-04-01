@@ -75,6 +75,8 @@ public class BigIntegerTest {
         //      '>>>' is logical right shift: right shift, ditch lowest, highest fill 0
         //      '>>' is arithmetical right shift, when right shift a negative number, insert 1 to the highest bit;
         //           when right shift a positive number, insert 0 to the highest bit;
+        // when shift parameter>=32, shift (parameter%32) bits,
+        // e.g., left shift 32 means shift 0 bit(no move); right shift 34 means shift 2 bits.
         for (int a:new int[]{96754441, -206107026, 803362655, Integer.MIN_VALUE+1}) {
             System.out.println("<<");
             for (int i=0;i<=32;i++) {

@@ -3,7 +3,7 @@ package my.projects.structure;
 import java.util.EnumMap;
 import java.util.EnumSet;
 
-public class EnumTest {
+public class EnumMapTest {
     public static void main(String[] args) {
         testEnum();
     }
@@ -29,6 +29,10 @@ public class EnumTest {
         @Override
         public String toString() {
             return this.name();
+        }
+
+        public int getMes() {
+            return mes;
         }
     }
 
@@ -80,7 +84,12 @@ public class EnumTest {
         System.out.println(map.get(Month.March));
 
         EnumSet<Mes> set = EnumSet.range(Mes.Marzo, Mes.Julio);
-        System.out.println(set);
+        for (Mes mes: set) {
+            System.out.println(mes.toString());
+            System.out.println(mes.name());
+            System.out.println(mes.ordinal());
+            System.out.println(mes.getMes());
+        }
     }
 
 }
