@@ -1705,19 +1705,6 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
         }
     }
 
-    /**
-     * A place-holder node used in computeIfAbsent and compute
-     */
-    static final class ReservationNode<K,V> extends Node<K,V> {
-        ReservationNode() {
-            super(RESERVED, null, null, null);
-        }
-
-        Node<K,V> find(int h, Object k) {
-            return null;
-        }
-    }
-
     /* ---------------- Table Initialization and Resizing -------------- */
 
     /**
@@ -1725,6 +1712,8 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
      * Must be negative when shifted left by RESIZE_STAMP_SHIFT.
      */
     static final int resizeStamp(int n) {
+        // for example, 22 (10110) has 27 (11011) leading zeros, so resizeStamp for 22 is:
+        // 27|(1<<15) = 32768+27 = 1000000000011011
         return Integer.numberOfLeadingZeros(n) | (1 << (RESIZE_STAMP_BITS - 1));
     }
 
@@ -1735,15 +1724,15 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
         Node<K,V>[] tab; int sc;
         while ((tab = table) == null || tab.length == 0) {
             if ((sc = sizeCtl) < 0)
-                Thread.yield(); // lost initialization race; just spin
-            else if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {
+                Thread.yield();    // current thread lost initialization race; just spin
+            else if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {   // cas sizeCtl as -1 to initialize table
                 try {
                     if ((tab = table) == null || tab.length == 0) {
                         int n = (sc > 0) ? sc : DEFAULT_CAPACITY;
                         @SuppressWarnings("unchecked")
                         Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n];
                         table = tab = nt;
-                        sc = n - (n >>> 2);
+                        sc = n - (n >>> 2);        // sc=0.75*n
                     }
                 } finally {
                     sizeCtl = sc;
@@ -1766,35 +1755,36 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
      */
     private final void addCount(long x, int check) {
         CounterCell[] as; long b, s;
+        // if CAS to change baseCount is failed
         if ((as = counterCells) != null ||
                 !U.compareAndSwapLong(this, BASECOUNT, b = baseCount, s = b + x)) {
             CounterCell a; long v; int m;
             boolean uncontended = true;
-            if (as == null || (m = as.length - 1) < 0 ||
-                    (a = as[MyThreadLocalRandom.getProbe() & m]) == null ||
-                    !(uncontended =
+            if (as == null || (m = as.length - 1) < 0 ||                                // as == null
+                    (a = as[MyThreadLocalRandom.getProbe() & m]) == null ||             // the random cell is null
+                    !(uncontended =                                                     // CAS the change cell failed
                             U.compareAndSwapLong(a, CELLVALUE, v = a.value, v + x))) {
-                fullAddCount(x, uncontended);
+                fullAddCount(x, uncontended);         // do full add count
                 return;
             }
             if (check <= 1)
                 return;
-            s = sumCount();
+            s = sumCount();   // modify current count
         }
-        if (check >= 0) {
+        if (check >= 0) {     // 'check>=0' is true after putting, need to check whether resizing is needed
             Node<K,V>[] tab, nt; int n, sc;
-            while (s >= (long)(sc = sizeCtl) && (tab = table) != null &&
-                    (n = tab.length) < MAXIMUM_CAPACITY) {
+            while (s >= (long)(sc = sizeCtl) && (tab = table) != null &&  // check sizeCtl in each loop
+                    (n = tab.length) < MAXIMUM_CAPACITY) {  // if current entry number larger than sizeCtl, need resize
                 int rs = resizeStamp(n);
-                if (sc < 0) {
+                if (sc < 0) {                                       // sc<0, resizing is preforming
                     if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 ||
                             sc == rs + MAX_RESIZERS || (nt = nextTable) == null ||
                             transferIndex <= 0)
                         break;
-                    if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1))
+                    if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1))   // set sc to help transfer
                         transfer(tab, nt);
                 }
-                else if (U.compareAndSwapInt(this, SIZECTL, sc,
+                else if (U.compareAndSwapInt(this, SIZECTL, sc,  // sc>=0, try to resizing by itself
                         (rs << RESIZE_STAMP_SHIFT) + 2))
                     transfer(tab, null);
                 s = sumCount();
@@ -1815,7 +1805,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                 if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 ||
                         sc == rs + MAX_RESIZERS || transferIndex <= 0)
                     break;
-                if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1)) {
+                if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1)) {     // set sc to help transfer
                     transfer(tab, nextTab);
                     break;
                 }
@@ -1861,6 +1851,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                             sc == rs + MAX_RESIZERS || (nt = nextTable) == null ||
                             transferIndex <= 0)
                         break;
+                    // increment 'sizeCtl' before start transfer
                     if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1))
                         transfer(tab, nt);
                 }
@@ -1874,12 +1865,17 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
     /**
      * Moves and/or copies the nodes in each bin to new table. See
      * above for explanation.
+     * The method is called when:
+     *     1). A thread is putting, replacing, clearing when it found a ForwardingNode, it will help transfer
+     *     2). A thread is adding count after putting, it will resizing if needed
+     *     3). putAll() or treeifyBin() to call tryPresize()
      */
     private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
         int n = tab.length, stride;
+        // 'stride' is the granularity to perform transfer
         if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
             stride = MIN_TRANSFER_STRIDE; // subdivide range
-        if (nextTab == null) {            // initiating
+        if (nextTab == null) {            // initiating nextTab
             try {
                 @SuppressWarnings("unchecked")
                 Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n << 1];
@@ -1899,45 +1895,47 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
             Node<K,V> f; int fh;
             while (advance) {
                 int nextIndex, nextBound;
-                if (--i >= bound || finishing)
+                if (--i >= bound || finishing)        // i is decrementing from nextIndex-1 to bound
                     advance = false;
                 else if ((nextIndex = transferIndex) <= 0) {
                     i = -1;
                     advance = false;
                 }
                 else if (U.compareAndSwapInt
-                        (this, TRANSFERINDEX, nextIndex,
-                                nextBound = (nextIndex > stride ?
-                                        nextIndex - stride : 0))) {
+                        (this, TRANSFERINDEX, nextIndex,               // CAS to claim that current thread will
+                                nextBound = (nextIndex > stride ?        // perform the transfer in the range of
+                                        nextIndex - stride : 0))) {      // oldTab[nextIndex-1] ~ odlTab[nexBound]
                     bound = nextBound;
-                    i = nextIndex - 1;
+                    i = nextIndex - 1;                // i is the first index to process
                     advance = false;
                 }
             }
             if (i < 0 || i >= n || i + n >= nextn) {
                 int sc;
-                if (finishing) {
+                if (finishing) {                     // the last thread to finish transfer need to aftercare
                     nextTable = null;
                     table = nextTab;
-                    sizeCtl = (n << 1) - (n >>> 1);
+                    sizeCtl = (n << 1) - (n >>> 1);  // current table size 2n, current threshold 1.5n
                     return;
                 }
+                // decrement 'sizeCtl' after finish transfer
                 if (U.compareAndSwapInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
+                    // check if current thread is the last one to perform transfer
                     if ((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT)
-                        return;
-                    finishing = advance = true;
+                        return;                            // if not, just return
+                    finishing = advance = true;            // if is, set finish true to set new table
                     i = n; // recheck before commit
                 }
             }
-            else if ((f = tabAt(tab, i)) == null)
+            else if ((f = tabAt(tab, i)) == null)     // if oldTab[i]==null, set newTab[i]=null
                 advance = casTabAt(tab, i, null, fwd);
-            else if ((fh = f.hash) == MOVED)
-                advance = true; // already processed
+            else if ((fh = f.hash) == MOVED)          // if oldTab[i] is a ForwardingNode, means it has been processed
+                advance = true;
             else {
                 synchronized (f) {
-                    if (tabAt(tab, i) == f) {
-                        Node<K,V> ln, hn;
-                        if (fh >= 0) {
+                    if (tabAt(tab, i) == f) {         // recheck f unchanged
+                        Node<K,V> ln, hn;             // low head, high head
+                        if (fh >= 0) {                // f is a normal node
                             int runBit = fh & n;
                             Node<K,V> lastRun = f;
                             for (Node<K,V> p = f.next; p != null; p = p.next) {
@@ -1958,20 +1956,21 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                             for (Node<K,V> p = f; p != lastRun; p = p.next) {
                                 int ph = p.hash; K pk = p.key; V pv = p.val;
                                 if ((ph & n) == 0)
-                                    ln = new Node<K,V>(ph, pk, pv, ln);
+                                    ln = new Node<K,V>(ph, pk, pv, ln);   // insert node at head, the order is reversed
                                 else
                                     hn = new Node<K,V>(ph, pk, pv, hn);
                             }
-                            setTabAt(nextTab, i, ln);
+                            setTabAt(nextTab, i, ln);        // set low head and high head to nextTab
                             setTabAt(nextTab, i + n, hn);
-                            setTabAt(tab, i, fwd);
+                            setTabAt(tab, i, fwd);           // set oldTab[i] to ForwardingNode to mark it as processed
                             advance = true;
                         }
-                        else if (f instanceof TreeBin) {
+                        else if (f instanceof TreeBin) {     // f is a tree node
                             TreeBin<K,V> t = (TreeBin<K,V>)f;
                             TreeNode<K,V> lo = null, loTail = null;
                             TreeNode<K,V> hi = null, hiTail = null;
                             int lc = 0, hc = 0;
+                            // split the tree to two double-linked lists
                             for (Node<K,V> e = t.first; e != null; e = e.next) {
                                 int h = e.hash;
                                 TreeNode<K,V> p = new TreeNode<K,V>
@@ -1993,13 +1992,14 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                                     ++hc;
                                 }
                             }
+                            // check either we need to untreeify the list or re-construct a tree
                             ln = (lc <= UNTREEIFY_THRESHOLD) ? untreeify(lo) :
                                     (hc != 0) ? new TreeBin<K,V>(lo) : t;
                             hn = (hc <= UNTREEIFY_THRESHOLD) ? untreeify(hi) :
                                     (lc != 0) ? new TreeBin<K,V>(hi) : t;
-                            setTabAt(nextTab, i, ln);
+                            setTabAt(nextTab, i, ln);        // set low head and high head to nextTab
                             setTabAt(nextTab, i + n, hn);
-                            setTabAt(tab, i, fwd);
+                            setTabAt(tab, i, fwd);           // set oldTab[i] to ForwardingNode to mark it as processed
                             advance = true;
                         }
                     }
@@ -2013,6 +2013,10 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
     /**
      * A padded cell for distributing counts.  Adapted from LongAdder
      * and Striped64.  See their internal docs for explanation.
+     * The principle is that, if multiple thread want to change a shared value,
+     * first try to CAS the baseCount,
+     * if CAS succeeded, return;
+     * if CAS failed, distribute the delta value in a random position of an array.
      */
     @sun.misc.Contended static final class CounterCell {
         volatile long value;
@@ -2127,6 +2131,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
             else if ((b = tabAt(tab, index)) != null && b.hash >= 0) {
                 synchronized (b) {
                     if (tabAt(tab, index) == b) {
+                        // first double link the nodes, i.e., change Node to TreeNode
                         TreeNode<K,V> hd = null, tl = null;
                         for (Node<K,V> e = b; e != null; e = e.next) {
                             TreeNode<K,V> p =
@@ -2138,6 +2143,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                                 tl.next = p;
                             tl = p;
                         }
+                        // then set node as tree, the tree is constructed by 'new TreeBin(head)'
                         setTabAt(tab, index, new TreeBin<K,V>(hd));
                     }
                 }
@@ -2269,6 +2275,7 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
                     r = x;
                 }
                 else {
+                    // construct the tree by insert node one by one
                     K k = x.key;
                     int h = x.hash;
                     Class<?> kc = null;
@@ -3721,8 +3728,10 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
     }
 
     public static void main(String[] args) {
-        testCapacity1();
-        testCapacity2();
+        //testCapacity1();
+        //testCapacity2();
+        //testResizeStamp();
+        testClass();
     }
 
     private static void testCapacity1() {
@@ -3744,6 +3753,26 @@ public class MyConcurrentHashMap<K,V> extends AbstractMap<K,V>
         map.put("c", "");
         System.out.println(map.sizeCtl);
         System.out.println(map.table.length);
+    }
+
+    private static void testResizeStamp() {
+        for (int i: new int[]{1 ,2, 4, 7, 8, 22, Integer.MAX_VALUE/4-100, Integer.MAX_VALUE/4+100}) {
+            System.out.printf("size: %d, stamp: %d, %s, leading 0s: %s\n", i, resizeStamp(i),
+                    Integer.toBinaryString(resizeStamp(i)), Integer.toBinaryString(Integer.numberOfLeadingZeros(i)));
+        }
+    }
+
+    private static void testClass() {
+        for (Class<?> clazz: new Class<?>[]{Node.class, TreeNode.class, MyConcurrentHashMap.class}) {
+            System.out.println("canonical: " + clazz.getCanonicalName());
+            System.out.println("name: " + clazz.getCanonicalName());
+            System.out.println("declare: " + clazz.getDeclaringClass());
+            System.out.println("enclosing: " + clazz.getEnclosingClass());
+            for (Class<?> dec: clazz.getDeclaredClasses()) {
+                System.out.println("dd: " + dec);
+            }
+            System.out.println();
+        }
     }
 }
 

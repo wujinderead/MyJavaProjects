@@ -117,12 +117,15 @@ public class UnsafeTest {
     private static void testArray() throws Exception {
         int longOff = unsafe.arrayBaseOffset(long[].class);
         int longScale = unsafe.arrayIndexScale(long[].class);
+        int longScaleShift = 31 - Integer.numberOfLeadingZeros(longScale);
         out.println("long off: " + longOff);
         out.println("long scale: " + longScale);
+        out.println("long scale shift: " + longScaleShift);
+        // use scale shift to replace multiplication
         long[] longs = new long[3];
-        unsafe.putLong(longs, (long) longOff, 123);
-        unsafe.putLong(longs, (long) longOff+longScale, 234);
-        unsafe.putLong(longs, (long) longOff+longScale*2, 567);
+        unsafe.putLong(longs, (long) longOff+(0<<longScaleShift), 123);
+        unsafe.putLong(longs, (long) longOff+(1<<longScaleShift), 234);
+        unsafe.putLong(longs, (long) longOff+(2<<longScaleShift), 567);
         out.println(longs[0]);
         out.println(longs[1]);
         out.println(longs[2]);
@@ -130,12 +133,15 @@ public class UnsafeTest {
         short[] shorts = new short[4];
         int shortOff = unsafe.arrayBaseOffset(shorts.getClass());
         int shortScale = unsafe.arrayIndexScale(shorts.getClass());
+        int shortScaleShift = 31 - Integer.numberOfLeadingZeros(shortScale);
         out.println("short off: " + shortOff);
         out.println("short scale: " + shortScale);
-        unsafe.putShort(shorts, (long) shortOff, (short) 123);
-        unsafe.putShort(shorts, (long) shortOff+shortScale, (short) 456);
-        unsafe.putShort(shorts, (long) shortOff+shortScale*2, (short) -32000);
-        unsafe.putShort(shorts, (long) shortOff+shortScale*3, (short) 32000);
+        out.println("short scale shift: " + shortScaleShift);
+        // use scale shift to replace multiplication
+        unsafe.putShort(shorts, (long) shortOff+(0<<shortScaleShift), (short) 123);
+        unsafe.putShort(shorts, (long) shortOff+(1<<shortScaleShift), (short) 456);
+        unsafe.putShort(shorts, (long) shortOff+(2<<shortScaleShift), (short) -32000);
+        unsafe.putShort(shorts, (long) shortOff+(3<<shortScaleShift), (short) 32000);
         out.println(shorts[0]);
         out.println(shorts[1]);
         out.println(shorts[2]);
@@ -144,12 +150,15 @@ public class UnsafeTest {
         Tester[] testers = new Tester[4];
         int off = unsafe.arrayBaseOffset(testers.getClass());
         int scale = unsafe.arrayIndexScale(testers.getClass());
+        int scaleShift = 31 - Integer.numberOfLeadingZeros(scale);
         out.println("off: " + off);
         out.println("scale: " + scale);
-        unsafe.putObject(testers, (long) off, new Tester());
-        unsafe.putObject(testers, (long) off+scale, new Tester(999, 8.7));
-        unsafe.putObject(testers, (long) off+scale*2, Tester.class.newInstance());
-        unsafe.putObject(testers, (long) off+scale*3, unsafe.allocateInstance(Tester.class));
+        out.println("scale shift: " + scaleShift);
+        // use scale shift to replace multiplication
+        unsafe.putObject(testers, (long) off+(0<<scaleShift), new Tester());
+        unsafe.putObject(testers, (long) off+(1<<scaleShift), new Tester(999, 8.7));
+        unsafe.putObject(testers, (long) off+(2<<scaleShift), Tester.class.newInstance());
+        unsafe.putObject(testers, (long) off+(3<<scaleShift), unsafe.allocateInstance(Tester.class));
         out.println(testers[0]==null);
         out.println(testers[1]==null);
         out.println(testers[2]==null);
@@ -191,5 +200,7 @@ public class UnsafeTest {
         out.println("db2 hex: " + Double.toHexString(db2));
         out.println("long to double: " + Double.longBitsToDouble(0x1234567890abcdefL));
         out.println("long to double: " + Double.longBitsToDouble(0xfedcba0987654321L));
+        out.println("long to double: " + Double.longBitsToDouble(0x597dde0ba45c0eddL));
+        out.println("long to double: " + Double.longBitsToDouble(0xc71210b272517958L));
     }
 }
