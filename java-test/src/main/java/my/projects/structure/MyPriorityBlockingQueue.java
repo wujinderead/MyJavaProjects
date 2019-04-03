@@ -257,6 +257,8 @@ public class MyPriorityBlockingQueue<E> extends AbstractQueue<E>
     private void tryGrow(Object[] array, int oldCap) {
         lock.unlock(); // must release and then re-acquire main lock
         Object[] newArray = null;
+        // allocationSpinLock is a variable for resizing
+        // allocationSpinLock==0 means no thread is resizing, we can CAS it to resize
         if (allocationSpinLock == 0 &&
                 UNSAFE.compareAndSwapInt(this, allocationSpinLockOffset,
                         0, 1)) {
@@ -276,7 +278,8 @@ public class MyPriorityBlockingQueue<E> extends AbstractQueue<E>
                 allocationSpinLock = 0;
             }
         }
-        if (newArray == null) // back off if another thread is allocating
+        // if CAS failed, other thread is resizing, back off
+        if (newArray == null)
             Thread.yield();
         lock.lock();
         if (newArray != null && queue == array) {
@@ -515,7 +518,7 @@ public class MyPriorityBlockingQueue<E> extends AbstractQueue<E>
         E result;
         try {
             while ( (result = dequeue()) == null)
-                notEmpty.await();
+                notEmpty.await();         // wait until the queu has element
         } finally {
             lock.unlock();
         }
@@ -529,6 +532,7 @@ public class MyPriorityBlockingQueue<E> extends AbstractQueue<E>
         E result;
         try {
             while ( (result = dequeue()) == null && nanos > 0)
+                // Condition.awaitNanos(nano): wait until signaled or timeout, return the remaining waiting time
                 nanos = notEmpty.awaitNanos(nanos);
         } finally {
             lock.unlock();
