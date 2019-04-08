@@ -55,7 +55,7 @@ public class DualPivotQuicksort {
      * @param workBase origin of usable space in work array
      * @param workLen usable size of work array
      */
-    static void sort(int[] a, int left, int right,
+    public static void sort(int[] a, int left, int right,
                      int[] work, int workBase, int workLen) {
         // Use Quicksort on small arrays
         if (right - left < QUICKSORT_THRESHOLD) {
