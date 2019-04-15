@@ -10,16 +10,20 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.NoSuchElementException;
+import java.util.Random;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.Spliterator;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
+
+import static my.projects.structure.StructureUtil.getRandomKeys;
 
 /**
  * A scalable concurrent {@link ConcurrentNavigableMap} implementation.
@@ -666,21 +670,21 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 if (r != null) {
                     Node<K,V> n = r.node;
                     K k = n.key;
-                    if (n.value == null) {
+                    if (n.value == null) {   // the node indexed by r is deleted, unlink r
                         if (!q.unlink(r))
-                            break;           // restart
+                            break;           // unlink fail, restart from head
                         r = q.right;         // reread r
                         continue;
                     }
-                    if (cpr(cmp, key, k) > 0) {
+                    if (cpr(cmp, key, k) > 0) {   // if key>r.node.key, continue to right
                         q = r;
                         r = r.right;
                         continue;
                     }
                 }
-                if ((d = q.down) == null)
+                if ((d = q.down) == null)         // if level-0 tier, return q
                     return q.node;
-                q = d;
+                q = d;                            // else continue to lower tier
                 r = d.right;
             }
         }
@@ -737,20 +741,20 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
         outer: for (;;) {
             for (Node<K,V> b = findPredecessor(key, cmp), n = b.next;;) {
                 Object v; int c;
-                if (n == null)   //lgq annotate: b is the last, the key to find is to large
+                if (n == null)                  // b is the last, the requested key is too large, return null
                     break outer;
                 Node<K,V> f = n.next;
-                if (n != b.next)                // inconsistent read
+                if (n != b.next)                // inconsistent read, find predecessor again
                     break;
-                if ((v = n.value) == null) {    // n is deleted
+                if ((v = n.value) == null) {    // n is deleted, help delete n and restart
                     n.helpDelete(b, f);
                     break;
                 }
-                if (b.value == null || v == n)  // b is deleted
+                if (b.value == null || v == n)  // b is deleted or marker, restart
                     break;
-                if ((c = cpr(cmp, key, n.key)) == 0)
+                if ((c = cpr(cmp, key, n.key)) == 0)  // found and return
                     return n;
-                if (c < 0)
+                if (c < 0)                      // not found, return null
                     break outer;
                 b = n;
                 n = f;
@@ -817,13 +821,13 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 if (n != null) {
                     Object v; int c;
                     Node<K,V> f = n.next;
-                    if (n != b.next)               // inconsistent read
+                    if (n != b.next)                // inconsistent read
                         break;
-                    if ((v = n.value) == null) {   // n is deleted
+                    if ((v = n.value) == null) {    // n is deleted
                         n.helpDelete(b, f);
                         break;
                     }
-                    if (b.value == null || v == n) // b is deleted
+                    if (b.value == null || v == n)  // b is deleted
                         break;
                     if ((c = cpr(cmp, key, n.key)) > 0) {
                         b = n;
@@ -837,29 +841,30 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                         }
                         break; // restart if lost race to replace value
                     }
-                    // else c < 0; fall through
+                    // else c < 0; fall through. i.e., b.value < insert key < n.value, insert new node between b nad n
                 }
 
-                z = new Node<K,V>(key, value, n);
+                z = new Node<K,V>(key, value, n);   // make new node
                 if (!b.casNext(n, z))
                     break;         // restart if lost race to append to b
-                break outer;
+                break outer;                        // insert succeed
             }
         }
 
         int rnd = MyThreadLocalRandom.nextSecondarySeed();
-        if ((rnd & 0x80000001) == 0) { // test highest bit = lowest bit = 0, i.e. rate=1/4
+        if ((rnd & 0x80000001) == 0) {       // test highestBit==lowestBit==0, i.e., 1/4 to perform add level
             int level = 1, max;
-            while (((rnd >>>= 1) & 1) != 0) // test how many consecutive 1's right before lowest bit
+            while (((rnd >>>= 1) & 1) != 0)  // test how many consecutive 1's right before lowest bit
                 ++level;
             Index<K,V> idx = null;
             HeadIndex<K,V> h = head;
-            if (level <= (max = h.level)) {
+            if (level <= (max = h.level)) {       // if level < maxLevel, grow to level
                 for (int i = 1; i <= level; ++i)
                     idx = new Index<K,V>(z, idx, null);
             }
-            else { // try to grow by one level
-                level = max + 1; // hold in array and later pick the one to use
+            else {                                // if level > maxLevel, try to grow maxLevel by one level
+                level = max + 1;
+                // hold in array and later pick the one to use
                 @SuppressWarnings("unchecked")Index<K,V>[] idxs =
                         (Index<K,V>[])new Index<?,?>[level+1];
                 for (int i = 1; i <= level; ++i)
@@ -867,47 +872,47 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                 for (;;) {
                     h = head;
                     int oldLevel = h.level;
-                    if (level <= oldLevel) // lost race to add level
+                    if (level <= oldLevel)        // lost race to add level, stop the add level procedure
                         break;
                     HeadIndex<K,V> newh = h;
                     Node<K,V> oldbase = h.node;
                     for (int j = oldLevel+1; j <= level; ++j)
-                        newh = new HeadIndex<K,V>(oldbase, newh, idxs[j], j);
+                        newh = new HeadIndex<K,V>(oldbase, newh, idxs[j], j);  // add new higher level to head indices
                     if (casHead(h, newh)) {
                         h = newh;
                         idx = idxs[level = oldLevel];
-                        break;
+                        break;   // if CAS succeeds, set new head succeed, end loop; else if CAS fails, retry
                     }
                 }
             }
             // find insertion points and splice in
             splice: for (int insertionLevel = level;;) {
                 int j = h.level;
-                for (Index<K,V> q = h, r = q.right, t = idx;;) {
+                for (Index<K,V> q = h, r = q.right, t = idx;;) {   // t is the index node to be spliced
                     if (q == null || t == null)
                         break splice;
                     if (r != null) {
                         Node<K,V> n = r.node;
                         // compare before deletion check avoids needing recheck
                         int c = cpr(cmp, key, n.key);
-                        if (n.value == null) {
+                        if (n.value == null) {    // check if r.node.value==null, unlink r
                             if (!q.unlink(r))
                                 break;
                             r = q.right;
                             continue;
                         }
-                        if (c > 0) {
+                        if (c > 0) {              //if c<=0, find link place
                             q = r;
                             r = r.right;
                             continue;
                         }
                     }
 
-                    if (j == insertionLevel) {
-                        if (!q.link(r, t))
-                            break; // restart
+                    if (j == insertionLevel) {    // only level<=oldMaxLevel need splice
+                        if (!q.link(r, t))        // e.g., from q(1) ->  r(3), to q(1) -> t(2) -> r(3), reset q's successor from r to t
+                            break;                // restart if link failed
                         if (t.node.value == null) {
-                            findNode(key);
+                            findNode(key);        // if t has been deleted, invoke findNode() to help deletion
                             break splice;
                         }
                         if (--insertionLevel == 0)
@@ -915,7 +920,7 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
                     }
 
                     if (--j >= insertionLevel && j < level)
-                        t = t.down;
+                        t = t.down;        // move to lower tier
                     q = q.down;
                     r = q.right;
                 }
@@ -953,31 +958,32 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             for (Node<K,V> b = findPredecessor(key, cmp), n = b.next;;) {
                 Object v; int c;
                 if (n == null)
-                    break outer;
+                    break outer;                     // desired key not found, break outer
                 Node<K,V> f = n.next;
-                if (n != b.next)                    // inconsistent read
+                if (n != b.next)                     // inconsistent read, repeat findPredecessor()
                     break;
-                if ((v = n.value) == null) {        // n is deleted
+                if ((v = n.value) == null) {         // n is deleted, repeat findPredecessor()
                     n.helpDelete(b, f);
                     break;
                 }
-                if (b.value == null || v == n)      // b is deleted
+                if (b.value == null || v == n)       // b is deleted, repeat findPredecessor()
                     break;
-                if ((c = cpr(cmp, key, n.key)) < 0)
+                if ((c = cpr(cmp, key, n.key)) < 0)  // desired key not found, break outer
                     break outer;
                 if (c > 0) {
                     b = n;
                     n = f;
-                    continue;
+                    continue;                        // continue to right
                 }
-                if (value != null && !value.equals(v))
+                // c=0, requested key found
+                if (value != null && !value.equals(v))   // value not equal, break outer
                     break outer;
-                if (!n.casValue(v, null))
+                if (!n.casValue(v, null))             // CAS n.value to null, if fail, repeat findPredecessor()
                     break;
                 if (!n.appendMarker(f) || !b.casNext(n, f))
-                    findNode(key);                  // retry via findNode
+                    findNode(key);                   // retry via findNode
                 else {
-                    findPredecessor(key, cmp);      // clean index
+                    findPredecessor(key, cmp);       // clean index
                     if (head.right == null)
                         tryReduceLevel();
                 }
@@ -1048,17 +1054,17 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
             if ((n = (b = head.node).next) == null)
                 return null;
             Node<K,V> f = n.next;
-            if (n != b.next)
+            if (n != b.next)              // inconsistent read, retry
                 continue;
             Object v = n.value;
-            if (v == null) {
+            if (v == null) {              // help delete marker node, and retry
                 n.helpDelete(b, f);
                 continue;
             }
-            if (!n.casValue(v, null))
+            if (!n.casValue(v, null))  // CAS value null to delete, if failed, retry
                 continue;
             if (!n.appendMarker(f) || !b.casNext(n, f))
-                findFirst(); // retry
+                findFirst();              // retry
             clearIndexToFirst();
             @SuppressWarnings("unchecked") V vv = (V)v;
             return new AbstractMap.SimpleImmutableEntry<K,V>(n.key, vv);
@@ -3447,6 +3453,64 @@ public class MyConcurrentSkipListMap<K,V> extends AbstractMap<K,V>
 
         } catch (Exception e) {
             throw new Error(e);
+        }
+    }
+
+    public static void main(String[] args) {
+        //testSkipListTier();
+        testBit();
+    }
+
+    private static void testSkipListTier() {
+        MyConcurrentSkipListMap<String, String> map = new MyConcurrentSkipListMap<>();
+        List<String> added = new LinkedList<>();
+        List<String> list = getRandomKeys(30, 8, 3);
+        int firstAdded = 10;
+        for (int i = 0; i < firstAdded; i++) {
+            map.put(list.get(i), "");
+            added.add(list.get(i));
+            System.out.println(map + "\n");
+        }
+        System.out.println(map + "\n");
+        // first add 10 entry
+        Random random = new Random(System.currentTimeMillis());
+        int removed = 0;
+        for (int i = firstAdded; i < list.size(); i++) {
+            float rate = random.nextFloat();
+            // 1/5 rate to remove added keys
+            if (rate < 0.2f) {
+                int index = random.nextInt(added.size());
+                String str = added.remove(index);
+                System.out.println("remove '" + str + "'");
+                map.remove(str);
+                removed++;
+                System.out.println(map + "\n");
+            }
+            // add remaining entries
+            added.add(list.get(i));
+            map.put(list.get(i), "");
+            System.out.println(map + "\n");
+        }
+        System.out.printf("all %d, removed %d, size %d\n", list.size(), removed, map.size());
+
+        for (Index hi = map.head; hi != null; hi = hi.down) {
+            System.out.println("level: " + ((HeadIndex) hi).level);
+            System.out.println("key: " + hi.node.key);
+            System.out.println("value: " + hi.node.value + " " + (hi.node.value==map.BASE_HEADER));
+        }
+        // key is sorted in natural order in map
+        List<String> keys = new ArrayList<>(map.keySet());
+        System.out.println("unsorted keys: " + map.keySet());
+        Collections.sort(keys);
+        System.out.println("sorted keys: " + keys);
+    }
+
+    private static void testBit() {
+        for (int rnd : new int[]{0b1110, 0b11010, 0b111101}) {
+            int level = 0;
+            while (((rnd >>>= 1) & 1) != 0)  // test how many consecutive 1's right before lowest bit
+                ++level;
+            System.out.println(level);
         }
     }
 }
