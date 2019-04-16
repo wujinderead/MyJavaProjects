@@ -38,6 +38,11 @@ public class CharArrayTest {
             ch = reader.read();
             System.out.println("reset read: " + (char) ch);
 
+            // '🀀🀗😀' can be encoded with single-char, they are encoded in double-char
+            while ((ch = reader.read()) != -1) {
+                System.out.println("read: " + (char) ch);
+            }
+
             reader.close();
         } catch (IOException e) {
             e.printStackTrace();
