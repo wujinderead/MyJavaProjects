@@ -11,7 +11,8 @@ import static java.lang.System.currentTimeMillis;
 public class ReentrantLockTest {
     public static void main(String[] args) throws Exception {
         //testCondition();
-        testReentrantLock();
+        //testReentrantLock();
+        testDoubleLock();
     }
 
     private static void testCondition() throws Exception {
@@ -171,12 +172,26 @@ public class ReentrantLockTest {
         }, "t3").start();
 
         Thread.sleep(200);
-        System.out.println("\ncurk time: " + (currentTimeMillis()-start));
+        System.out.println("\ncur time: " + (currentTimeMillis()-start));
         System.out.println("main- lockHold: " + lock.isHeldByCurrentThread());
         System.out.println("main- holdCnt : " + lock.getHoldCount());
         System.out.println("main- queueLen: " + lock.getQueueLength());
         System.out.println("main- hasQueue: " + lock.hasQueuedThreads());
         System.out.println();
 
+    }
+
+    private static void testDoubleLock() {
+        ReentrantLock lock = new ReentrantLock();
+        try {
+            lock.lock();
+            System.out.println("lock1");
+            lock.lock();
+            System.out.println("lock2");
+        } finally {
+            System.out.println("unlock2");
+            lock.lock();
+            System.out.println("unlock1");
+        }
     }
 }
