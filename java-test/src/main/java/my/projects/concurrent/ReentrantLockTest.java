@@ -187,11 +187,21 @@ public class ReentrantLockTest {
             lock.lock();
             System.out.println("lock1");
             lock.lock();
-            System.out.println("lock2");
+            System.out.println("lock2");  // reentrant lock has count, if lock twice, should unlock twice
         } finally {
             System.out.println("unlock2");
             lock.lock();
-            System.out.println("unlock1");
+            //System.out.println("unlock1");
+            //lock.unlock();
         }
+        new Thread(() -> {
+            try {
+                lock.lock();
+                System.out.println("tlock1");  // can't acquire lock since lock has been unlocked only once
+            } finally {
+                System.out.println("tunlock");
+                lock.lock();
+            }
+        }).start();
     }
 }
