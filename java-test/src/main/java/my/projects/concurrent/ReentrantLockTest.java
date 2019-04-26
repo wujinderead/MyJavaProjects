@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static java.lang.System.out;
 import static java.lang.Thread.currentThread;
 import static java.lang.System.currentTimeMillis;
 
@@ -12,7 +13,8 @@ public class ReentrantLockTest {
     public static void main(String[] args) throws Exception {
         //testCondition();
         //testReentrantLock();
-        testDoubleLock();
+        //testDoubleLock();
+        testSignalAll();
     }
 
     private static void testCondition() throws Exception {
@@ -29,26 +31,22 @@ public class ReentrantLockTest {
         new Thread(() -> {
             try {
                 lock.lock();
-                System.out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
                 long cur = System.currentTimeMillis();
-                while (System.currentTimeMillis()-cur<600) {
-                    // do nothing,
-                }
+                while (System.currentTimeMillis()-cur<600) {}
                 while (a.a!=2) {
-                    System.out.println(currentThread().getName() + " condition unmet, continue wait, " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " condition unmet, continue wait, " + (currentTimeMillis()-start));
                     // await for condition, give up the lock, so other thread can acquire the lock.
                     // when other thread invoke 'condition.signal()', current thread can continue to run.
                     // however, current thread won't run immediately when signaled, because it don't has lock.
                     // after other thread release the lock, and current thread acquire the lock, it can continue to run.
-                    condition.await();
+                    condition.awaitUninterruptibly();
                 }
                 a.a = 3;
-                System.out.println(currentThread().getName() + " condition met, set a 3, " + (currentTimeMillis()-start));
-            } catch (InterruptedException e) {
-                // ignore
+                out.println(currentThread().getName() + " condition met, set a 3, " + (currentTimeMillis()-start));
             } finally {
                 lock.unlock();
-                System.out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
             }
         }, "thread0").start();
 
@@ -56,18 +54,18 @@ public class ReentrantLockTest {
 
         new Thread(() -> {
             try {
-                System.out.println(currentThread().getName() + " start at, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " start at, " + (currentTimeMillis()-start));
                 lock.lock();
-                System.out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
                 a.a = 1;
                 condition.signal();
-                System.out.println(currentThread().getName() + " set 1, signaled, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " set 1, signaled, " + (currentTimeMillis()-start));
             } finally {
                 // lazily release the lock
                 long cur = System.currentTimeMillis();
                 while (System.currentTimeMillis()-cur<200) { }
                 lock.unlock();
-                System.out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
             }
         }, "thread1").start();
 
@@ -75,24 +73,24 @@ public class ReentrantLockTest {
 
         new Thread(() ->  {
             try {
-                System.out.println(currentThread().getName() + " start at, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " start at, " + (currentTimeMillis()-start));
                 lock.lock();
-                System.out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
                 a.a = 2;
                 // signal the awaiting thread, however, the awaiting thread won't run until lock released
                 condition.signal();
-                System.out.println(currentThread().getName() + " set 2, signaled, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " set 2, signaled, " + (currentTimeMillis()-start));
             } finally {
                 // lazily release the lock
                 long cur = System.currentTimeMillis();
                 while (System.currentTimeMillis()-cur<200) { }
                 lock.unlock();
-                System.out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
             }
         }, "thread2").start();
 
         Thread.sleep(1600);
-        System.out.println("main end, a=" + a.a);
+        out.println("main end, a=" + a.a);
     }
 
     private static void testReentrantLock() throws Exception {
@@ -103,11 +101,11 @@ public class ReentrantLockTest {
         new Thread(() -> {
             try {
                 lock.lock();
-                System.out.println(currentThread().getName() + " acquire lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " acquire lock, " + (currentTimeMillis()-start));
                 long cur = System.currentTimeMillis();
                 while (System.currentTimeMillis()-cur<500) { }
             } finally {
-                System.out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
                 lock.unlock();
             }
         }, "t1").start();
@@ -117,21 +115,21 @@ public class ReentrantLockTest {
         Runnable runnable = () -> {
             try {
                 if (lock.tryLock(700, TimeUnit.MILLISECONDS)) {
-                    System.out.println(currentThread().getName() + " acquire lock, " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " acquire lock, " + (currentTimeMillis()-start));
                     long cur = System.currentTimeMillis();
                     while (System.currentTimeMillis()-cur<300) { }
-                    System.out.println(currentThread().getName() + "- lockHold: " + lock.isHeldByCurrentThread());
-                    System.out.println(currentThread().getName() + "- holdCnt : " + lock.getHoldCount());
-                    System.out.println(currentThread().getName() + "- queueLen: " + lock.getQueueLength());
-                    System.out.println(currentThread().getName() + "- hasQueue: " + lock.hasQueuedThreads());
+                    out.println(currentThread().getName() + "- lockHold: " + lock.isHeldByCurrentThread());
+                    out.println(currentThread().getName() + "- holdCnt : " + lock.getHoldCount());
+                    out.println(currentThread().getName() + "- queueLen: " + lock.getQueueLength());
+                    out.println(currentThread().getName() + "- hasQueue: " + lock.hasQueuedThreads());
                     condition.await();
-                    System.out.println(currentThread().getName() + " awake.");
+                    out.println(currentThread().getName() + " awake.");
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
                 if (lock.isHeldByCurrentThread()) {
-                    System.out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
                     lock.unlock();
                 }
             }
@@ -140,44 +138,44 @@ public class ReentrantLockTest {
         new Thread(runnable, "t2b").start();
 
         Thread.sleep(50);
-        System.out.println("\ncurk time: " + (currentTimeMillis()-start));
-        System.out.println("main- lockHold: " + lock.isHeldByCurrentThread());
-        System.out.println("main- holdCnt : " + lock.getHoldCount());
-        System.out.println("main- queueLen: " + lock.getQueueLength());
-        System.out.println("main- hasQueue: " + lock.hasQueuedThreads());
-        System.out.println();
+        out.println("\ncurk time: " + (currentTimeMillis()-start));
+        out.println("main- lockHold: " + lock.isHeldByCurrentThread());
+        out.println("main- holdCnt : " + lock.getHoldCount());
+        out.println("main- queueLen: " + lock.getQueueLength());
+        out.println("main- hasQueue: " + lock.hasQueuedThreads());
+        out.println();
 
         Thread.sleep(700);
 
         new Thread(() -> {
             try {
                 if (lock.tryLock(1000, TimeUnit.MILLISECONDS)) {
-                    System.out.println(currentThread().getName() + " acquire lock, " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " acquire lock, " + (currentTimeMillis()-start));
                     long cur = System.currentTimeMillis();
                     while (System.currentTimeMillis()-cur<300) { }
-                    System.out.println(currentThread().getName() + "- lockHold: " + lock.isHeldByCurrentThread());
-                    System.out.println(currentThread().getName() + "- holdCnt : " + lock.getHoldCount());
-                    System.out.println(currentThread().getName() + "- queueLen: " + lock.getQueueLength());
-                    System.out.println(currentThread().getName() + "- hasQueue: " + lock.hasQueuedThreads());
+                    out.println(currentThread().getName() + "- lockHold: " + lock.isHeldByCurrentThread());
+                    out.println(currentThread().getName() + "- holdCnt : " + lock.getHoldCount());
+                    out.println(currentThread().getName() + "- queueLen: " + lock.getQueueLength());
+                    out.println(currentThread().getName() + "- hasQueue: " + lock.hasQueuedThreads());
                     condition.signal();
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
                 if (lock.isHeldByCurrentThread()) {
-                    System.out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
                     lock.unlock();
                 }
             }
         }, "t3").start();
 
         Thread.sleep(200);
-        System.out.println("\ncur time: " + (currentTimeMillis()-start));
-        System.out.println("main- lockHold: " + lock.isHeldByCurrentThread());
-        System.out.println("main- holdCnt : " + lock.getHoldCount());
-        System.out.println("main- queueLen: " + lock.getQueueLength());
-        System.out.println("main- hasQueue: " + lock.hasQueuedThreads());
-        System.out.println();
+        out.println("\ncur time: " + (currentTimeMillis()-start));
+        out.println("main- lockHold: " + lock.isHeldByCurrentThread());
+        out.println("main- holdCnt : " + lock.getHoldCount());
+        out.println("main- queueLen: " + lock.getQueueLength());
+        out.println("main- hasQueue: " + lock.hasQueuedThreads());
+        out.println();
 
     }
 
@@ -185,23 +183,92 @@ public class ReentrantLockTest {
         ReentrantLock lock = new ReentrantLock();
         try {
             lock.lock();
-            System.out.println("lock1");
+            out.println("lock1");
             lock.lock();
-            System.out.println("lock2");  // reentrant lock has count, if lock twice, should unlock twice
+            out.println("lock2");  // reentrant lock has count, if lock twice, should unlock twice
         } finally {
-            System.out.println("unlock2");
+            out.println("unlock2");
             lock.lock();
-            //System.out.println("unlock1");
+            //out.println("unlock1");
             //lock.unlock();
         }
         new Thread(() -> {
             try {
                 lock.lock();
-                System.out.println("tlock1");  // can't acquire lock since lock has been unlocked only once
+                out.println("tlock1");  // can't acquire lock since lock has been unlocked only once
             } finally {
-                System.out.println("tunlock");
+                out.println("tunlock");
                 lock.lock();
             }
         }).start();
+    }
+
+    private static void testSignalAll() throws Exception {
+        // use a class to contain value
+        class A {
+            volatile int a;
+        }
+        A a= new A();
+        a.a = 0;
+        ReentrantLock lock = new ReentrantLock();
+        Condition condition = lock.newCondition();
+        long start = currentTimeMillis();
+
+        new Thread(() -> {
+            lock.lock();
+            try {
+                out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
+                long cur = System.currentTimeMillis();
+                while (System.currentTimeMillis()-cur<600) {}
+                condition.awaitUninterruptibly();
+                a.a = 3;
+                out.println(currentThread().getName() + " signaled, set a 3, " + (currentTimeMillis()-start));
+            } finally {
+                long cur = System.currentTimeMillis();
+                while (System.currentTimeMillis()-cur<200) {}
+                lock.unlock();
+                out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+            }
+        }, "t1").start();
+
+        Thread.sleep(300);
+
+        new Thread(() -> {
+            lock.lock();
+            try {
+                out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
+                long cur = System.currentTimeMillis();
+                while (System.currentTimeMillis()-cur<600) {}
+                condition.awaitUninterruptibly();
+                a.a = 2;
+                out.println(currentThread().getName() + " signaled, set a 2, " + (currentTimeMillis()-start));
+            } finally {
+                long cur = System.currentTimeMillis();
+                while (System.currentTimeMillis()-cur<200) {}
+                lock.unlock();
+                out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+            }
+        }, "t2").start();
+
+        Thread.sleep(600);
+
+        new Thread(() ->  {
+            lock.lock();
+            try {
+                out.println(currentThread().getName() + " get lock, " + (currentTimeMillis()-start));
+                a.a = 1;
+                condition.signalAll();   // signal all awaiting threads
+                out.println(currentThread().getName() + " set 1, signaled, " + (currentTimeMillis()-start));
+            } finally {
+                // lazily release the lock
+                long cur = System.currentTimeMillis();
+                while (System.currentTimeMillis()-cur<200) {}
+                lock.unlock();
+                out.println(currentThread().getName() + " release lock, " + (currentTimeMillis()-start));
+            }
+        }, "t3").start();
+
+        Thread.sleep(1600);
+        out.println("main end, a=" + a.a);
     }
 }

@@ -10,7 +10,8 @@ import static java.lang.Thread.currentThread;
 
 public class ReentrantReadWriteLockTest {
     public static void main(String[] args) {
-        testReadWrite();
+        //testReadWrite();
+        testReentrant();
     }
 
     // 'read read' is inclusive, 'read write' and 'write write' are exclusive
@@ -91,6 +92,87 @@ public class ReentrantReadWriteLockTest {
             }
         }, "R3").start();
         sleep(6000);
+    }
+
+    // read lock can be reentrant by read, write lock can be reentrant by write,
+    // read lock can't be entrant by write and otherwise.
+    // getReadHoldCount() and getWriteHoldCount() is the reentrant times by current thread, not all the thread.
+    private static void testReentrant() {
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+        ReentrantReadWriteLock.ReadLock read = lock.readLock();
+        ReentrantReadWriteLock.WriteLock write = lock.writeLock();
+        AtomicInteger a = new AtomicInteger(10);
+        long start = currentTimeMillis();
+        new Thread(() -> {
+            out.println(currentThread().getName() + " start at " + (currentTimeMillis()-start));
+            read.lock();
+            try {
+                out.println(currentThread().getName() + " get " + a.get() + " at " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " hold by " + lock.getReadHoldCount());
+                sleep(500);
+                read.lock();
+                try {
+                    a.set(12);
+                    out.println(currentThread().getName() + " set " + a.get() + " at " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " hold by " + lock.getReadHoldCount());
+                    sleep(500);
+                } finally {
+                    out.println(currentThread().getName() + " release rlock at " + (currentTimeMillis()-start));
+                    read.unlock();
+                    sleep(500);
+                }
+            } finally {
+                out.println(currentThread().getName() + " release rlock at " + (currentTimeMillis()-start));
+                read.unlock();
+            }
+        }, "T1").start();
+        sleep(100);
+        new Thread(() -> {
+            out.println(currentThread().getName() + " start at " + (currentTimeMillis()-start));
+            read.lock();
+            try {
+                out.println(currentThread().getName() + " get " + a.get() + " at " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " hold by " + lock.getReadHoldCount());
+                sleep(500);
+                read.lock();
+                try {
+                    a.set(12);
+                    out.println(currentThread().getName() + " set " + a.get() + " at " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " hold by " + lock.getReadHoldCount());
+                    sleep(500);
+                } finally {
+                    out.println(currentThread().getName() + " release rlock at " + (currentTimeMillis()-start));
+                    read.unlock();
+                    sleep(500);
+                }
+            } finally {
+                out.println(currentThread().getName() + " release rlock at " + (currentTimeMillis()-start));
+                read.unlock();
+            }
+        }, "T2").start();
+        new Thread(() -> {
+            out.println(currentThread().getName() + " start at " + (currentTimeMillis()-start));
+            write.lock();
+            try {
+                out.println(currentThread().getName() + " get " + a.get() + " at " + (currentTimeMillis()-start));
+                out.println(currentThread().getName() + " hold by " + lock.getWriteHoldCount());
+                sleep(500);
+                write.lock();
+                try {
+                    a.set(12);
+                    out.println(currentThread().getName() + " set " + a.get() + " at " + (currentTimeMillis()-start));
+                    out.println(currentThread().getName() + " hold by " + lock.getWriteHoldCount());
+                    sleep(500);
+                } finally {
+                    out.println(currentThread().getName() + " release wlock at " + (currentTimeMillis()-start));
+                    write.unlock();
+                    sleep(500);
+                }
+            } finally {
+                out.println(currentThread().getName() + " release wlock at " + (currentTimeMillis()-start));
+                write.unlock();
+            }
+        }, "T3").start();
     }
 
     private static void sleep(long time) {
