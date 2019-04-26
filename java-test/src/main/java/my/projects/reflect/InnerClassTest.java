@@ -9,8 +9,9 @@ public class InnerClassTest {
         testInnerClassStatic();
     }
 
-    private class A{int a=0;}
-    public class B{int a=0;}
+    int y = 0;
+    private class A{int a=0;void print(){out.println(y);}}
+    public class B{int a=0;void print(){out.println(y);}}  // can access non-static field
     static class C{int a=0;}
     public static class D{int a=0;}
     private static class E{int a=0;}
