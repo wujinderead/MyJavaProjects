@@ -2,7 +2,6 @@ package my.projects.concurrent;
 
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static java.lang.System.currentTimeMillis;
 import static java.lang.System.out;
@@ -10,20 +9,42 @@ import static java.lang.Thread.currentThread;
 
 public class SpinLockTest {
     // spin lock, unfair
-    public static class SpinLock {
-        private AtomicReference<Thread> owner = new AtomicReference<>();
+    public static class SpinLock1 {
+        private AtomicInteger owner = new AtomicInteger(0);
 
         public void lock() {
-            Thread currentThread = currentThread();
-            // If the lock is not occupied, then set the current thread for the lock owner
-            while (!owner.compareAndSet(null, currentThread)) {
+            while (!owner.compareAndSet(0, 1)) {
             }
         }
 
         public void unlock() {
-            Thread currentThread = currentThread();
-            // Only the lock owner can release the lock
-            owner.compareAndSet(currentThread, null);
+            owner.set(0);
+        }
+    }
+
+    public static class SpinLock2 {
+        private int a = 0;
+
+        public void lock() {
+            while (!U.compareAndSwapInt(this, offset, 0, 1)) {
+            }
+        }
+
+        public void unlock() {
+            U.putInt(this, offset, 0);
+        }
+
+        static sun.misc.Unsafe U;
+        static long offset;
+        static {
+            try {
+                Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+                field.setAccessible(true);
+                U = (sun.misc.Unsafe) field.get(null);
+                offset = U.objectFieldOffset(SpinLock2.class.getDeclaredField("a"));
+            } catch (Exception e) {
+                throw new Error(e);
+            }
         }
     }
 
@@ -87,6 +108,41 @@ public class SpinLockTest {
         }
     }
 
+    public static class ClhLock2 {
+        class Node {
+            // the pred pointer is actually contained in tail
+            // no need to specify a 'Node pred' field
+            boolean locked = false;
+        }
+        Node tail = new Node();
+
+        public Node lock() {
+            Node cur = new Node();    // can use ThreadLocal instead, which do not need to return the node
+            Node pred = (Node) U.getAndSetObject(this, tailOff, cur);
+            cur.locked = true;
+            while (U.getBoolean(pred, boolOff)){}
+            return cur;
+        }
+        public void unlock(Node cur) {
+            // if tail==cur, cur is the last in queue, we can set tail null, and GC cur
+            U.putBoolean(cur, boolOff, false);
+        }
+        private static final sun.misc.Unsafe U;
+        private static final long tailOff;
+        private static final long boolOff;
+        static {
+            try {
+                Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+                field.setAccessible(true);
+                U = (sun.misc.Unsafe) field.get(null);
+                tailOff = U.objectFieldOffset(ClhLock.class.getDeclaredField("tail"));
+                boolOff = U.objectFieldOffset(ClhLock.Node.class.getDeclaredField("locked"));
+            } catch (Exception e) {
+                throw new Error(e);
+            }
+        }
+    }
+
     public static class McsLock {
         class Node {
             // no need to specify a 'Node pred' field
@@ -133,11 +189,12 @@ public class SpinLockTest {
         //testSpinLock();
         //testTicketLock();
         testClhLock();
-        testMcsLock();
+        //testMcsLock();
     }
 
     private static void testSpinLock() {
-        SpinLock lock = new SpinLock();
+        SpinLock2 lock = new SpinLock2();
+        out.println(lock.getClass());
         long start = currentTimeMillis();
         Runnable runnable = () -> {
             out.println(currentThread().getName() + " start at " + (currentTimeMillis()-start));
@@ -177,11 +234,12 @@ public class SpinLockTest {
     }
 
     private static void testClhLock() {
-        ClhLock lock = new ClhLock();
+        ClhLock2 lock = new ClhLock2();
+        out.println(lock.getClass());
         long start = currentTimeMillis();
         Runnable doubleLock = () -> {
             out.println(currentThread().getName() + " start at " + (currentTimeMillis()-start));
-            ClhLock.Node node = lock.lock();
+            ClhLock2.Node node = lock.lock();
             out.println(currentThread().getName() + " acquire lock at " + (currentTimeMillis()-start));
             try {
                 long cur = currentTimeMillis();
@@ -203,12 +261,12 @@ public class SpinLockTest {
         // clh lock is not reentrant, this would cause spin forever
         Runnable reentrantLock = () -> {
             out.println(currentThread().getName() + " start at " + (currentTimeMillis()-start));
-            ClhLock.Node outer = lock.lock();
+            ClhLock2.Node outer = lock.lock();
             out.println(currentThread().getName() + " acquire outer at " + (currentTimeMillis()-start));
             try {
                 long cur = currentTimeMillis();
                 while (currentTimeMillis()-cur<500);
-                ClhLock.Node inner = lock.lock();
+                ClhLock2.Node inner = lock.lock();
                 out.println(currentThread().getName() + " acquire inner at " + (currentTimeMillis()-start));
                 try {
                     cur = currentTimeMillis();
